@@ -1,0 +1,18 @@
+sequenceDiagram
+    actor User
+    participant UI as Next.js UI
+    participant API as FastAPI
+    participant Redis
+    participant DB as PostgreSQL
+
+    User->>UI: Çıkış yap butonuna tıklar
+    UI->>API: POST /auth/logout
+    Note over UI,API: access_token + refresh_token cookie gönderilir
+    API->>API: Access token'dan jti çıkar
+    API->>Redis: blacklist:access:{jti} → 1 (TTL 15dk)
+    API->>API: Refresh token'dan jti çıkar
+    API->>Redis: refresh_token:{jti} sil
+    API->>DB: Refresh token'ı revoke et (is_revoked=true)
+    API-->>UI: 200 OK + cookie'leri temizle
+    Note over API,UI: Her iki cookie de cleared
+    UI-->>User: Login sayfasına yönlendir

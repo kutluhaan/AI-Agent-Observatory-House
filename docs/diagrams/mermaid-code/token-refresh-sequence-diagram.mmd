@@ -1,0 +1,33 @@
+sequenceDiagram
+    actor User
+    participant UI as Next.js UI
+    participant API as FastAPI
+    participant Redis
+    participant DB as PostgreSQL
+
+    Note over User,UI: Access token süresi doldu (401 aldı)
+    UI->>API: POST /auth/refresh
+    Note over UI,API: Sadece refresh_token cookie gönderilir
+    API->>API: Refresh token'ı doğrula (RS256)
+    alt Token geçersiz veya süresi dolmuş
+        API-->>UI: 401 Unauthorized
+        UI-->>User: Login sayfasına yönlendir
+    else Token geçerli
+        API->>Redis: refresh_token:{jti} var mı?
+        alt Redis'te yok (revoke edilmiş)
+            Redis-->>API: Null
+            API-->>UI: 401 Unauthorized
+            UI-->>User: Login sayfasına yönlendir
+        else Redis'te var
+            Redis-->>API: user_id
+            API->>Redis: Eski refresh_token:{jti} sil
+            API->>DB: Eski token'ı revoke et
+            API->>API: Yeni Access Token üret (15dk)
+            API->>API: Yeni Refresh Token üret (7gün)
+            API->>DB: Yeni refresh token kaydet
+            API->>Redis: Yeni refresh_token:{jti} → user_id
+            API-->>UI: 200 OK + yeni httpOnly cookies
+            Note over API,UI: Token rotation tamamlandı
+            UI-->>User: İşlem devam eder, kullanıcı fark etmez
+        end
+    end

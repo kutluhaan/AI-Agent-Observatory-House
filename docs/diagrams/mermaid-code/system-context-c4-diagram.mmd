@@ -1,0 +1,21 @@
+C4Context
+    title System Context — AI Agent Observatory
+
+    Person(user, "Developer / Researcher", "Agent'larını test eden,<br/>gözlemleyen kullanıcı")
+    Person(orgAdmin, "Org Admin", "Organizasyonu yöneten,<br/>üye davet eden kullanıcı")
+
+    System(observatory, "AI Agent Observatory", "Agent test, observability<br/>ve orchestration platformu")
+
+    System_Ext(openai, "OpenAI API", "GPT-4o, GPT-4 Turbo")
+    System_Ext(anthropic, "Anthropic API", "Claude Sonnet, Opus")
+    System_Ext(ollama, "Ollama / vLLM", "Local LLM'ler")
+    System_Ext(email, "Email Service", "Davet ve bildirim<br/>emailleri")
+
+    Rel(user, observatory, "Agent çalıştırır, test eder,<br/>trace izler", "HTTPS")
+    Rel(orgAdmin, observatory, "Org yönetir,<br/>üye davet eder", "HTTPS")
+    Rel(observatory, openai, "LLM çağrısı yapar", "HTTPS/REST")
+    Rel(observatory, anthropic, "LLM çağrısı yapar", "HTTPS/REST")
+    Rel(observatory, ollama, "LLM çağrısı yapar", "HTTP/REST")
+    Rel(observatory, email, "Email gönderir", "SMTP/API")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

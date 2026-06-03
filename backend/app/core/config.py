@@ -1,0 +1,56 @@
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # App
+    app_env: str = "development"
+    app_secret_key: str = "changeme"
+    frontend_url: str = "http://localhost:3000"
+
+    # Database
+    database_url: str = "postgresql+asyncpg://observatory:changeme@postgres:5432/observatory"
+
+    # Redis
+    redis_url: str = "redis://redis:6379"
+
+    # ClickHouse
+    clickhouse_host: str = "clickhouse"
+    clickhouse_port: int = 9000
+    clickhouse_db: str = "observatory"
+    clickhouse_user: str = "observatory"
+    clickhouse_password: str = "changeme"
+
+    # JWT
+    jwt_private_key: str = ""
+    jwt_public_key: str = ""
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 7
+
+    # Email
+    resend_api_key: str = ""
+    email_from: str = "noreply@yourdomain.com"
+
+    # LLM Providers
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    ollama_base_url: str = "http://host.docker.internal:11434"
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env == "development"
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
