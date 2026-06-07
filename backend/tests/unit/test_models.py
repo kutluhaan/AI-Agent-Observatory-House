@@ -201,10 +201,14 @@ def test_org_member_unique_constraint():
     assert "uq_org_member" in constraint_names
 
 
-def test_org_invitation_unique_constraint():
+def test_org_invitation_partial_unique_index():
     """Aynı org'a aynı email'e iki pending davet gönderilemez."""
-    constraint_names = {c.name for c in OrganizationInvitation.__table__.constraints}
-    assert "uq_org_invitation_email" in constraint_names
+    index_names = {i.name for i in OrganizationInvitation.__table__.indexes}
+    assert "uq_org_invitation_pending_email" in index_names
+
+    idx = next(i for i in OrganizationInvitation.__table__.indexes if i.name == "uq_org_invitation_pending_email")
+    assert idx.unique
+    assert "status = 'pending'" in str(idx.dialect_options["postgresql"]["where"])
 
 
 def test_oauth_unique_constraint():
@@ -213,13 +217,35 @@ def test_oauth_unique_constraint():
     assert "uq_oauth_provider_id" in constraint_names
 
 
+# ─── Check Constraint'ler ─────────────────────────────────
+
+
+def test_org_member_role_check_constraint():
+    """role sadece owner, admin veya member olabilir."""
+    constraint_names = {c.name for c in OrganizationMember.__table__.constraints}
+    assert "ck_org_member_role" in constraint_names
+
+
+def test_org_invitation_check_constraints():
+    """Davet role ve status değerleri DB'de sınırlı."""
+    constraint_names = {c.name for c in OrganizationInvitation.__table__.constraints}
+    assert "ck_invitation_role" in constraint_names
+    assert "ck_invitation_status" in constraint_names
+
+
+def test_oauth_provider_check_constraint():
+    """OAuth provider sadece google veya github olabilir."""
+    constraint_names = {c.name for c in OAuthAccount.__table__.constraints}
+    assert "ck_oauth_provider" in constraint_names
+
+
 # ─── Index'ler ────────────────────────────────────────────
 
 
 def test_users_email_index():
-    index_names = {i.name for i in User.__table__.indexes}
-    assert "ix_users_email" in index_names or any("email" in str(i) for i in User.__table__.indexes)
-
+    col = User.__table__.columns["email"]
+    assert col.unique
+    
 
 def test_refresh_tokens_indexes():
     index_names = {i.name for i in RefreshToken.__table__.indexes}

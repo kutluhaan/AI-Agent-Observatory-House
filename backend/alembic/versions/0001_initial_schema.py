@@ -18,6 +18,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0001"
@@ -26,11 +27,36 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def install_updated_at_triggers() -> None:
+    op.execute(text("""
+        CREATE OR REPLACE FUNCTION set_updated_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = NOW();
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """))
+    for table in ("users", "organizations", "oauth_accounts"):
+        op.execute(text(f"""
+            CREATE TRIGGER tr_{table}_updated_at
+            BEFORE UPDATE ON {table}
+            FOR EACH ROW
+            EXECUTE FUNCTION set_updated_at();
+        """))
+
+
+def remove_updated_at_triggers() -> None:
+    for table in ("oauth_accounts", "organizations", "users"):
+        op.execute(text(f"DROP TRIGGER IF EXISTS tr_{table}_updated_at ON {table};"))
+    op.execute(text("DROP FUNCTION IF EXISTS set_updated_at();"))
+
+
 def upgrade() -> None:
     # ─── users ───────────────────────────────────────────
     op.create_table(
         "users",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("password_hash", sa.String(255), nullable=True),
         sa.Column("is_verified", sa.Boolean(), nullable=False, server_default=sa.text("false")),
@@ -42,12 +68,11 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
-    op.create_index("idx_users_email", "users", ["email"])
 
     # ─── organizations ────────────────────────────────────
     op.create_table(
         "organizations",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("slug", sa.String(100), nullable=False),
         sa.Column("plan", sa.String(50), nullable=False, server_default=sa.text("'free'")),
@@ -63,7 +88,7 @@ def upgrade() -> None:
     # ─── organization_members ─────────────────────────────
     op.create_table(
         "organization_members",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("role", sa.String(50), nullable=False),
@@ -87,7 +112,7 @@ def upgrade() -> None:
     # ─── refresh_tokens ───────────────────────────────────
     op.create_table(
         "refresh_tokens",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("token_hash", sa.String(255), nullable=False),
         sa.Column("device_info", sa.String(500), nullable=True),
@@ -108,7 +133,7 @@ def upgrade() -> None:
     # ─── email_verifications ──────────────────────────────
     op.create_table(
         "email_verifications",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("token_hash", sa.String(255), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
@@ -124,7 +149,7 @@ def upgrade() -> None:
     # ─── password_resets ──────────────────────────────────
     op.create_table(
         "password_resets",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("token_hash", sa.String(255), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
@@ -142,7 +167,7 @@ def upgrade() -> None:
     # ─── organization_invitations ─────────────────────────
     op.create_table(
         "organization_invitations",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("invited_by", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
@@ -161,7 +186,6 @@ def upgrade() -> None:
             ["invited_by"], ["users.id"],
             name="fk_invitations_invited_by",
         ),
-        sa.UniqueConstraint("organization_id", "email", name="uq_org_invitation_email"),
         sa.CheckConstraint("role IN ('admin', 'member')", name="ck_invitation_role"),
         sa.CheckConstraint(
             "status IN ('pending', 'accepted', 'expired', 'cancelled')",
@@ -171,10 +195,13 @@ def upgrade() -> None:
     op.create_index("idx_invitations_token_hash", "organization_invitations", ["token_hash"])
     op.create_index("idx_invitations_email", "organization_invitations", ["email"])
 
+    # Aynı org'a aynı email'e iki pending davet gönderilemez — INVITATION_ALREADY_PENDING
+    op.create_index("uq_org_invitation_pending_email", "organization_invitations", ["organization_id", "email"], unique=True, postgresql_where=sa.text("status = 'pending'"))
+
     # ─── oauth_accounts (Faz 4 için hazır) ───────────────
     op.create_table(
         "oauth_accounts",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("provider", sa.String(50), nullable=False),
         sa.Column("provider_id", sa.String(255), nullable=False),
@@ -192,9 +219,12 @@ def upgrade() -> None:
         sa.CheckConstraint("provider IN ('google', 'github')", name="ck_oauth_provider"),
     )
 
+    install_updated_at_triggers()
+
 
 def downgrade() -> None:
     # Ters sırada drop et — foreign key bağımlılıkları nedeniyle
+    remove_updated_at_triggers()
     op.drop_table("oauth_accounts")
     op.drop_table("organization_invitations")
     op.drop_table("password_resets")

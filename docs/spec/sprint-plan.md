@@ -89,21 +89,23 @@ observatory/
 **Tool:** Alembic (FastAPI için standart migration aracı)
 
 **Yapılacaklar:**
-- [ ] Alembic kurulumu ve konfigürasyonu
-- [ ] SQLAlchemy model'leri yaz (spec'teki 7 tablo)
-  - [ ] `users`
-  - [ ] `organizations`
-  - [ ] `organization_members`
-  - [ ] `refresh_tokens`
-  - [ ] `email_verifications`
-  - [ ] `organization_invitations`
-  - [ ] `oauth_accounts` (Faz 4 için şimdiden)
-- [ ] İlk migration oluştur ve çalıştır
-- [ ] Index'lerin oluştuğunu doğrula
+- [x] Alembic kurulumu ve konfigürasyonu
+- [x] SQLAlchemy model'leri yaz (8 tablo)
+  - [x] `users`
+  - [x] `organizations`
+  - [x] `organization_members`
+  - [x] `refresh_tokens`
+  - [x] `email_verifications`
+  - [x] `password_resets`
+  - [x] `organization_invitations`
+  - [x] `oauth_accounts` (Faz 4 için şimdiden)
+- [x] İlk migration (`0001_initial_schema.py`) — tablolar, index'ler, CHECK'ler, partial unique, `updated_at` trigger'ları
+- [x] Unit + integration testleri
+- [x] Doğrulama adımları: [m2-db-schema.md](./m2-db-schema.md#m2-doğrulama-repo-kökünden)
 
 **Tamamlanma kriteri:**
-- `alembic upgrade head` hatasız çalışır
-- Tüm tablolar ve index'ler PostgreSQL'de görünür
+- Migration downgrade/upgrade döngüsü hatasız çalışır
+- Unit ve integration testleri geçer
 
 ---
 

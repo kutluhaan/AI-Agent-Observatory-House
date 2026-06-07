@@ -138,8 +138,8 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph users_indexes["users — index'ler"]
-        UI1["idx_users_email\n(email)\nLogin + davet lookup"]
+    subgraph users_indexes["users — constraint'ler"]
+        UI1["UNIQUE(email)\nuq_users_email\nLogin lookup"]
     end
 
     subgraph org_indexes["organizations — index'ler"]
@@ -165,7 +165,7 @@ graph LR
     subgraph inv_indexes["organization_invitations — index'ler"]
         II1["idx_invitations_token_hash\n(token_hash)\nDavet kabul akışı"]
         II2["idx_invitations_email\n(email)\nPending davet kontrolü"]
-        II3["UNIQUE(org_id, email)\nTekrar davet engeli"]
+        II3["uq_org_invitation_pending_email\n(org_id, email)\nWHERE status=pending"]
     end
 ```
 
@@ -195,8 +195,8 @@ sequenceDiagram
     ENV->>CLI: Uygulanacak migration'ları belirle
     CLI->>PG: 0001_initial_schema.py → upgrade() çalıştır
     PG->>PG: 8 tablo oluştur
-    PG->>PG: 10 index oluştur
-    PG->>PG: Unique constraint'leri ekle
+    PG->>PG: 10 index + CHECK constraint'ler
+    PG->>PG: updated_at trigger'ları (users, orgs, oauth)
     PG->>PG: alembic_version = "0001" güncelle
     CLI-->>Dev: Done — 1 migration applied
 ```

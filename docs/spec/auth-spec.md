@@ -105,9 +105,6 @@ CREATE TABLE users (
     -- Her UPDATE'te tetiklenen trigger ile güncellenir.
     -- Profil değişikliklerini izlemek için kullanılır.
 );
-
-CREATE INDEX idx_users_email ON users(email);
--- Login ve davet akışında email'e göre lookup yapılır. Bu index olmadan full table scan gerekir.
 ```
 
 ---
@@ -146,6 +143,7 @@ CREATE TABLE organizations (
 
     created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    -- Her UPDATE'te tetiklenen trigger ile güncellenir (tr_organizations_updated_at).
 );
 
 CREATE INDEX idx_organizations_slug ON organizations(slug);
@@ -326,13 +324,7 @@ CREATE TABLE organization_invitations (
     -- Davet kabul edildiğinde set edilir. Audit ve UI için kullanılır.
     -- NULL ise henüz kabul edilmemiş demektir.
 
-    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    UNIQUE(organization_id, email)
-    -- Aynı org'a aynı email'e birden fazla pending davet gönderilemez.
-    -- INVITATION_ALREADY_PENDING hatasının DB seviyesindeki güvencesi.
-    -- Not: accepted/expired davetler bu constraint'i tetiklemez çünkü
-    -- yeni davet farklı bir row olarak eklenir.
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX idx_invitations_token_hash ON organization_invitations(token_hash);
@@ -340,6 +332,13 @@ CREATE INDEX idx_invitations_token_hash ON organization_invitations(token_hash);
 
 CREATE INDEX idx_invitations_email ON organization_invitations(email);
 -- Belirli bir email'e ait bekleyen davetleri kontrol etmek için kullanılır.
+
+CREATE UNIQUE INDEX uq_org_invitation_pending_email
+    ON organization_invitations (organization_id, email)
+    WHERE status = 'pending';
+-- Aynı org'a aynı email'e birden fazla pending davet gönderilemez.
+-- INVITATION_ALREADY_PENDING hatasının DB seviyesindeki güvencesi.
+-- accepted / expired / cancelled kayıtları engellemez; yeni pending eklenebilir.
 ```
 
 ---

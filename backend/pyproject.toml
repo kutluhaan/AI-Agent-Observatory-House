@@ -64,7 +64,10 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["backend/tests"]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require PostgreSQL",
+]
 
 [tool.ruff]
 line-length = 100

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, CheckConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,7 +19,7 @@ class Organization(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
     )
     name: Mapped[str] = mapped_column(
         String(255),
@@ -58,7 +58,6 @@ class Organization(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
         nullable=False,
     )
 
@@ -87,12 +86,16 @@ class OrganizationMember(Base):
             name="uq_org_member",
             # Aynı kullanıcı aynı org'da iki kez üye olamaz — ALREADY_MEMBER
         ),
+        CheckConstraint(
+            "role IN ('owner', 'admin', 'member')",
+            name="ck_org_member_role",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

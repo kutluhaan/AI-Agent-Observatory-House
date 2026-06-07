@@ -69,7 +69,8 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 | Milestone | Focus | Status |
 |-----------|--------|--------|
 | **M1** | Project skeleton, Docker, health checks | ✅ Done |
-| **M2–M6** | Database schema, auth, orgs, RBAC | Planned |
+| **M2** | Database schema + Alembic migrations | ✅ Done |
+| **M3–M6** | Auth, orgs, RBAC | Planned |
 | **M7–M12** | Providers, traces, agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
 
@@ -194,14 +195,15 @@ npm run dev
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:8000` if the API is not on the default host.
 
-### Database migrations (from M2 onward)
+### Database migrations (M2+)
+
+From the **repository root** (Docker dev stack):
 
 ```bash
-cd backend
-alembic upgrade head
-alembic revision --autogenerate -m "description"
-alembic downgrade -1
+docker compose -f docker-compose.dev.yml exec backend alembic upgrade head
 ```
+
+M2 health check (migration roundtrip + tests): [docs/spec/m2-db-schema.md#m2-doğrulama-repo-kökünden](docs/spec/m2-db-schema.md#m2-doğrulama-repo-kökünden)
 
 ### Health check
 

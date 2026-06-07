@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, CheckConstraint, func, text
 from sqlalchemy.dialects.postgresql import INET, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,7 +17,7 @@ class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -73,7 +73,7 @@ class EmailVerification(Base):
     __tablename__ = "email_verifications"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -112,7 +112,7 @@ class PasswordReset(Base):
     __tablename__ = "password_resets"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -152,16 +152,25 @@ class PasswordReset(Base):
 class OrganizationInvitation(Base):
     __tablename__ = "organization_invitations"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_org_invitation_pending_email",
             "organization_id",
             "email",
-            name="uq_org_invitation_email",
-            # Aynı org'a aynı email'e iki pending davet gönderilemez — INVITATION_ALREADY_PENDING
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+        CheckConstraint(
+            "role IN ('admin', 'member')",
+            name="ck_invitation_role",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'expired', 'cancelled')",
+            name="ck_invitation_status",
         ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -229,10 +238,14 @@ class OAuthAccount(Base):
             name="uq_oauth_provider_id",
             # Aynı Google hesabı iki farklı kullanıcıya bağlanamaz
         ),
+        CheckConstraint(
+            "provider IN ('google', 'github')",
+            name="ck_oauth_provider",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -271,7 +284,6 @@ class OAuthAccount(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
         nullable=False,
     )
 
