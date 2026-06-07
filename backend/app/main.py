@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 
+
 logger = structlog.get_logger()
 settings = get_settings()
 
@@ -13,6 +14,13 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Observatory API", env=settings.app_env)
+    from app.core.database import Base
+    import app.models  # noqa: F401 — modelleri Base'e kaydeder
+
+    # lifespan fonksiyonunun içinde, Redis'ten sonra:
+    table_count = len(Base.metadata.tables)
+    logger.info("Database models loaded", table_count=table_count)
+    
     yield
     logger.info("Observatory API shutdown complete")
 
