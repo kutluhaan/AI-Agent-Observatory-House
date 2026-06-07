@@ -20,7 +20,7 @@ def _sync_database_url() -> str:
     url = os.environ.get("DATABASE_URL", "")
     if not url:
         pytest.skip("DATABASE_URL not set")
-    return url.replace("+asyncpg", "")
+    return url.replace("postgresql+asyncpg", "postgresql+psycopg")
 
 
 @pytest.mark.integration
@@ -68,11 +68,13 @@ def test_pending_invitation_partial_unique_index():
         row = conn.execute(
             text(
                 """
-                SELECT indexdef FROM pg_indexes
-                WHERE tablename = 'organization_invitations'
-                  AND indexname = 'uq_org_invitation_pending_email'
+                SELECT i.indisunique, pg_get_expr(i.indpred, i.indrelid)
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+                WHERE c.relname = 'uq_org_invitation_pending_email'
                 """
             )
         ).fetchone()
     assert row is not None
-    assert "status = 'pending'" in row[0]
+    assert row[0] is True
+    assert row[1] is not None and "pending" in row[1]

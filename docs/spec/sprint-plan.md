@@ -107,6 +107,18 @@ observatory/
 - Migration downgrade/upgrade döngüsü hatasız çalışır
 - Unit ve integration testleri geçer
 
+**Doğrulama (repo kökünden, stack ayaktayken):**
+
+```bash
+docker compose -f docker-compose.dev.yml up --build -d
+
+docker compose -f docker-compose.dev.yml exec backend sh -c "alembic downgrade base && alembic upgrade head"
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/ -v
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/ -v -m integration
+```
+
+Ayrıntılı açıklamalar: [m2-db-schema.md](./m2-db-schema.md#m2-doğrulama-repo-kökünden)
+
 ---
 
 ## M3 — Auth Faz 1: Core

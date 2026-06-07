@@ -177,33 +177,68 @@ alembic_version tablosuna "0001" yazılır
 
 ## M2 Doğrulama (repo kökünden)
 
-Ön koşul: `docker compose -f docker-compose.dev.yml up -d`
+M2'nin sağlıklı olduğunu doğrulamak için **3 komut** yeterlidir. Her komut farklı bir katmanı test eder; hepsi geçerse milestone tamamlanmış kabul edilir.
 
-Her komut tek bir şeyi doğrular. Hepsi geçerse M2 sağlıklı kabul edilir.
+Tüm komutlar **repository kökünden** çalıştırılır (`cd backend` gerekmez). Container içindeki çalışma dizini zaten `/app` (backend).
 
-### 1. Migration ileri-geri döngüsü
+### Ön koşullar
+
+1. **`.env` dosyası** repo kökünde mevcut olmalı (`docker-compose.dev.yml` bunu okur).
+2. **Dev stack ayakta olmalı** — `exec` çalışan container gerektirir; stack kapalıysa komutlar başlamadan hata verir:
+
+   ```bash
+   docker compose -f docker-compose.dev.yml up --build -d
+   ```
+
+   İlk kurulumda veya `backend/pyproject.toml` dev bağımlılıkları değiştiyse `--build` şarttır (paketler image build sırasında kurulur; sadece `up -d` yetmez).
+
+3. **`POSTGRES_PASSWORD`** URL-safe olmalı (`!`, `?`, `@` gibi karakterler `DATABASE_URL` içinde asyncpg bağlantı hatasına yol açabilir). Şifre değiştirdikten sonra Postgres volume eski şifreyle kalmışsa: `down -v` ardından tekrar `up --build -d`.
+
+### Doğrulama komutları
+
+| # | Komut | Ne doğrular |
+|---|--------|-------------|
+| 1 | Migration downgrade + upgrade | Alembic `0001` migration'ı ileri-geri uygulanabilir; tablolar, index'ler, CHECK'ler, trigger'lar oluşur |
+| 2 | `pytest tests/unit/` | SQLAlchemy model metadata — tablo adları, unique/CHECK constraint'ler, partial index tanımı (DB bağlantısı gerekmez) |
+| 3 | `pytest tests/integration/ -m integration` | Canlı PostgreSQL — 8 auth tablosu, `alembic_version = 0001`, partial unique index predicate |
+
+#### 1. Migration ileri-geri döngüsü
+
+Alembic'in `downgrade base` ve `upgrade head` ile şemayı sıfırlayıp yeniden kurabildiğini doğrular.
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend sh -c "alembic downgrade base && alembic upgrade head"
 ```
 
-Beklenen: hata yok; şema sıfırlanıp `0001` yeniden uygulanır.
+**Beklenen:** Traceback yok. Son satırda `Running upgrade -> 0001, initial schema` görünür. Zaten base'deyse downgrade sessiz no-op olabilir.
 
-### 2. Model metadata
+#### 2. Model metadata (unit)
+
+Modellerin spec ile uyumlu tanımlandığını doğrular; PostgreSQL'e bağlanmaz.
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/ -v
 ```
 
-Beklenen: tüm unit testler geçer (tablo adları, constraint'ler, index'ler, CHECK'ler).
+**Beklenen:** `51 passed` (veya güncel test sayısı kadar passed), `0 failed`.
 
-### 3. Canlı PostgreSQL şeması
+#### 3. Canlı PostgreSQL şeması (integration)
+
+Gerçek veritabanında migration sonucunu doğrular.
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/ -v -m integration
 ```
 
-Beklenen: tüm integration testler geçer (tablolar, `alembic_version = 0001`, partial unique index).
+**Beklenen:** `4 passed` — tablolar mevcut, alembic head `0001`, `uq_org_invitation_pending_email` partial unique index aktif.
+
+### Tek seferde geçti mi?
+
+Üç komutun çıktısında hata / `FAILED` yoksa **M2 tamam**. Migration'ı yalnızca ilk kurulumda veya şema değişikliğinde uygulamak için:
+
+```bash
+docker compose -f docker-compose.dev.yml exec backend alembic upgrade head
+```
 
 ---
 

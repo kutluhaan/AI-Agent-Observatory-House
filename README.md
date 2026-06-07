@@ -195,15 +195,34 @@ npm run dev
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:8000` if the API is not on the default host.
 
-### Database migrations (M2+)
+### Database migrations and M2 verification (repo root)
 
-From the **repository root** (Docker dev stack):
+Dev stack (first time, or after `backend/pyproject.toml` dependency changes):
+
+```bash
+docker compose -f docker-compose.dev.yml up --build -d
+```
+
+Apply migrations only:
 
 ```bash
 docker compose -f docker-compose.dev.yml exec backend alembic upgrade head
 ```
 
-M2 health check (migration roundtrip + tests): [docs/spec/m2-db-schema.md#m2-doğrulama-repo-kökünden](docs/spec/m2-db-schema.md#m2-doğrulama-repo-kökünden)
+**M2 health check** — run all three from the repository root; each command validates one layer. Full explanations and expected output: [docs/spec/m2-db-schema.md — M2 Doğrulama](docs/spec/m2-db-schema.md#m2-doğrulama-repo-kökünden).
+
+```bash
+# 1. Migration roundtrip (Alembic downgrade base → upgrade head)
+docker compose -f docker-compose.dev.yml exec backend sh -c "alembic downgrade base && alembic upgrade head"
+
+# 2. Model metadata (no DB required)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/ -v
+
+# 3. Live PostgreSQL schema (8 tables, alembic head, partial unique index)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/ -v -m integration
+```
+
+All three must pass with no errors for M2 to be considered complete.
 
 ### Health check
 
