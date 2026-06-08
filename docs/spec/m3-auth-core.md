@@ -158,11 +158,11 @@ OpenSSL 3.x `BEGIN PRIVATE KEY` (PKCS#8) formatı da geçerlidir.
 - [x] Global hata formatı (`AppError` + Pydantic `VALIDATION_ERROR`)
 - [x] RS256 key'ler `.env`'de (placeholder değil)
 
-### Testler (henüz tamamlanmadı)
+### Testler
 
-- [ ] Unit testler: jwt encode/decode roundtrip (`mock_settings`)
-- [ ] Unit testler: `auth_context`, `get_current_user`
-- [ ] Integration testler: register → login → logout → `/me` akışı
+- [x] Unit testler: jwt encode/decode roundtrip (`mock_settings`)
+- [x] Unit testler: `auth_context`, `get_current_user`
+- [x] Integration testler: register → login → logout → `/me` akışı (`tests/integration/test_auth_flow.py`, 5 test)
 
 ---
 
@@ -171,13 +171,16 @@ OpenSSL 3.x `BEGIN PRIVATE KEY` (PKCS#8) formatı da geçerlidir.
 Stack ayaktayken (`docker compose -f docker-compose.dev.yml up --build -d`):
 
 ```bash
-# 1. M3 unit testleri (password, token_store, jwt helpers)
+# 1. M3 unit testleri (password, JWT roundtrip, token_store, auth_context, deps)
 docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_m3_services.py -v
 
 # 2. Tüm unit testler
 docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/ -v
 
-# 3. Manuel auth smoke test
+# 3. Auth integration testleri
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_auth_flow.py -v -m integration
+
+# 4. Manuel auth smoke test
 curl http://localhost:8000/health
 curl http://localhost:8000/auth/me
 # → 401 INVALID_TOKEN
@@ -185,11 +188,7 @@ curl http://localhost:8000/auth/me
 # register → DB'de is_verified=true → login → cookie ile /auth/me → 200
 ```
 
-Integration auth testi eklendikten sonra:
-
-```bash
-docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/ -v -m integration
-```
+> Integration conftest'te `clear_rate_limits` autouse fixture — her test öncesi Redis `ratelimit:*` key'lerini temizler.
 
 ---
 

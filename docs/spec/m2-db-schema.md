@@ -244,7 +244,7 @@ docker compose -f docker-compose.dev.yml exec backend alembic upgrade head
 
 ## Sonraki Adım
 
-M2 tamamlandıktan sonra M3 (Auth Core) bu tabloları kullanmaya başlar — **M3 implementasyonu tamamlandı**. Ayrıntılar: [m3-auth-core.md](./m3-auth-core.md)
+M2 tamamlandıktan sonra M3 (Auth Core) bu tabloları kullanmaya başlar — **M3 tamamlandı** (kod + testler). Ayrıntılar: [m3-auth-core.md](./m3-auth-core.md)
 
 - `users` → register/login/`/me`
 - `refresh_tokens` → login/logout (rotation M4)

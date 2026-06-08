@@ -6,12 +6,15 @@ Redis için fakeredis kullanılır.
 JWT için test key pair kullanılır.
 """
 import uuid
+import pytest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+from starlette.requests import Request
 
 from app.core.responses import UnauthorizedError
+from app.api.deps import get_current_user
+from app.services.auth_context import CurrentUser, resolve_user_from_token
 from app.services import jwt_service
 from app.services.password_service import (
     hash_password,
@@ -22,42 +25,43 @@ from app.services.password_service import (
 
 # ─── Test JWT Key Pair ────────────────────────────────────
 # Test için minimal RSA key pair (gerçek key değil)
-TEST_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEA2a2rwplBQLzHPZe5ekSKj/UEGehrSKuq/Mggn4PJNUZGLR91
-PNPG6KCOAsepT/Gy9sDdqiMVIHK8LUmvCxnBXulnuvfxOIkXXnpBgmRPLHXBR/V
-TzHHHrNqiPfbGxvNv1HkAE3KGn6BN/J1S7TYNKF/k9VrOhJ3TYKNS7UPiLqRK6e
-E3mUlb2e4RUCUJCVj1OQknSdaHvLEBIZOTjHOTCUXJCTRJyDJh9tGrJTqAQvEh/
-QkJGQ9R8AVMD0Y3Y5TbBbeMVvMnOiLiVs4xIAIY8X4QLDVMZ65NHaHZ9TnxWNF7
-GpYS7OmDf4gZ7M9UQHkWP9h4bAoGfn2VRmz4RQIDAQABAoIBAHh+e5nZdRXYKJOK
-5j8TzDp3EYGNNvMGnMR0w/a0jYJBgLNBW4HCJbLRE0vFc6MLcyPpLpCzUfCfC5vM
-JQNS0MxVPZrz9EVfZm9d2K0/pDAtTk8eTZ8hmJNRMxRUmAvJR6UJpP8vBx0Q+jLy
-5HHEXTe7DmBz3ANL6w1EVLfIkJ1IiSWMcqvQIJj0iFMC0jD0IIOH0dNRLa8Kfkw
-RkHd9Y9JXlwNcb8cZjDFsKzqcJSH8Y3tDi4MVnTPWlHlLAyvbS4fNeq+DSlX1IiX
-WFG7dWzH8Yh1Js+cUTsS1EvLfmFcDMRMsVNXBJZGBQ1bJuqd1O0qrxl6JBm1Bkh
-A56Cz4ECgYEA7R3WmXN8G5pXVOWjS1BW8Hs+K6mBOJCJqXLaBqbxIlJSGIcnY+tT
-8nzO1UVrJr5YdGaOI9vxA/3WL9SGKVO0C+R3MoKIk6aH/soxuMFk1Kb9Mu4WoUy7
-K1sXE+MgaVXRmqJIoFoQQxQ7FjcCRvjqIoKsVK1LQZF9r0lEp7kCgYEA61YVSQZ5
-vK4jOvjCzYjL7NLajXaDEO+0A5Bw2Y6gp3NPm5L+LHT5wlAHEA7pWs6xT89H0aqC
-cPpZ8C+G0N9Q3yKI5OTNvROaA+Z5TfXjSEDCQKWn9T3HTbAXW5Vl3YUxT1D5I6/
-x5xNrH0LfIMR29Q4CrLOKJ7XNdZrO2/rqjECgYEA2RuW0k9ZijEoHVvQ8p3/Lj0S
-bN/2K1BKXJ5g3M6fKbUJuFqz7QFYX7aS6TN3VEGiAp6OY8EQh4xOiJUbW5PKPFQ
-JxC6nFr4J6Y/E7Af3c0VJhkxzaF0MJgd5MFIP/IDzQFyA0XZ/oTUKL3CYJ7NHPG5
-xrNIQfV4KZF6qGkCgYBGSBGX1E0H2Cs1TJnZKNB0q+Pz8VyFUxd5IB5PZpEFQ1G8
-GRZY4IezR5h3L8KhVQRhJHbVhqPTcWdQvYHERFpZMmqEhGWlZUvA5Oc4ZzVQwCdC
-LrG5UmvH3w43B9NRF6N5bnkKJqKJ1OeD1VDw+YK5MbRD6JWg5DZsJf/LgQKBgDzY
-rJqF+hq6U3pJ/tA7bHIJFN/NeX7CX7J9QqPGx4V9xyR8cGBT0VHrxK+UgMLrNd/V
-Dpc5Sv2IsTpVkp7EBhF5DqBT5rVc6j2e4Gqh8cQ5RzPq7BkJz6x3P3X0hRd1MqMm
-I9HZaSl7ZEW9h/e+yBYD3TLRT/rNLNFW9yUf
------END RSA PRIVATE KEY-----"""
+TEST_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCIbDYA9l1VHiqn
+BIZfAyd+xgZvi2QVOVX/x+18fi2i0XRQQbtfPFqnc8kq3vaYlBtNOBcEvTn4Xz9k
+NMnfglC+K3HHdWQQVRYAGnFLnRHyOZzXUzCfYsS0qcbeliJajlrgATtErXXZU5G/
+5LqeIdmLoYI9J4i0xZHPRKbk7rIUniDySrKKUG2e3ztBzF8REmpU8Xvs5nhrks3E
+krgC3tRPEQb6p3UNqEJLzYrD0tJmMiAvKxs74/+BghF++8B6KmWiWYxahUQYZi0U
+mFGjLpJipWTci6ziVRjr/7aeQrrqK228lkaV+/fFaKmGhudp7ybAg9kh2vphimcS
+4heF5eN/AgMBAAECggEAC4ffRf7iLfrvbqUqmQadOfvm41q2yjcfFmWBpI94Wqtg
+LMBsOUUoAcCpn4laR9SM54lMI3G9tUk9BG0/JY3QNqKuv/B41WCRDCUwBPdxDYuN
+FC4gjU2TLr9YOHbGzzylCwtPmnhxiOhQCMDT0ost5hLFUqyaw3Ic5utN5/USRue5
+wkmwQrQGGTAqeGxgQysAu0xkUwx5TLkAdpd+PNjlz9uA6QNKxY1ChG28iBdpI0Fe
+hgmRCaPqT3YpmLanFnQ5uhWI5Li7bjo7LOp9Z7Ak760ucUNEaxdnhVxIGUoPQVsn
+FieAgjddVa9dhbImPfsTcrAfj1+2Lt0XgtVuXM73wQKBgQC9fpBKBRKtFb8c4TbV
+FDgJ1/S/ZlbypgAEDNHcMWc5IUEqpwdYEDuUBXKLhr2NRdCsPEsCjKXgej3yPLpV
+8CY2ZHp+IOcndNBVejG9I/xkCjatkL7CUrwRPHVFjui8Qu/16VnES/wZwJsPNbOo
+8lC22Gz9BaU5Gdet43+zVuOT8QKBgQC4TVVrLs5eKj/WgE9iQ5CnPqsbgf6jUyl8
+fvj8pVtC54Ei8zYy03W8VqxKfAfPliTMXrTCPNT/+E0pgkRiE60bcodjCHZURKzq
+Z+NIsjUUQfdx9AFmfirjDFGXaErnS6VvE4pVyBxLeAfmrOaIrrUzh6yF7VnSuQUX
+h1WE5IqebwKBgGqhI3RjcmTvTcFkgcRZQkdXvCNP5TFZc7zTseuj6R/etJrZrmpB
+iCT9A727rkImvQuOSe8/UcAFSYJb5caiAf6tf7glr60mMG1I+2AhNc7daHM2dgFH
+KQjR6nOfvRri18Ca9KZe05dyKE7gux4gbIbXNk0StixxfEofMCasiBchAoGBAIv/
+AmGWfl/9C9zuPl7QH/NKoUMV7c02gI73DD8thDNAE1HvGT5mbkqQM/OoX26KCI3N
+atUYzFtby5E6SKOPerEcwEazyN6eBBNSss0nwTYQHdxLkzy9neo2E0xFhpBHX/UO
+DMi4ZvXUyXup3rv4qd/osV5SOybcMEf9HzMBP2K1AoGANXMneQ87cj5kcxnS43N9
+8Qm7Mp0RTZauSSgswiUHOSoyyH4YKxovI8+Nrnvdkv5yZ/M289HtolGwJal5NxRQ
+0z2XGVmObm6YQzJDcfKMK2ZSZeI5StEx3DXnKPG5RbTcusfj/iMvYwtLtH3Bx2Sa
+FFUEX8Abs4Bl6ZWPZI0+mbM=
+-----END PRIVATE KEY-----"""
 
 TEST_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
-MIIBIjANBgQhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2a2rwplBQLzHPZe5ekSKj/
-UEGehrSKuq/Mggn4PJNUZGLEf91PNPG6KCOAsepT/Gy9sDdqiMVIHK8LUmvCxnB
-XulnuvfxOIkXXnpBgmRPLHXBR/VTzHHHrNqiPfbGxvNv1HkAE3KGn6BN/J1S7TY
-NKF/k9VrOhJ3TYKNS7UPiLqRK6eE3mUlb2e4RUCUJCVj1OQknSdaHvLEBIZOTjH
-OTCUXJCTRJyDJh9tGrJTqAQvEh/QkJGQ9R8AVMD0Y3Y5TbBbeMVvMnOiLiVs4xI
-AIY8X4QLDVMZ65NHaHZ9TnxWNF7GpYS7OmDf4gZ7M9UQHkWP9h4bAoGfn2VRmz4
-RQIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiGw2APZdVR4qpwSGXwMn
+fsYGb4tkFTlV/8ftfH4totF0UEG7Xzxap3PJKt72mJQbTTgXBL05+F8/ZDTJ34JQ
+vitxx3VkEFUWABpxS50R8jmc11Mwn2LEtKnG3pYiWo5a4AE7RK112VORv+S6niHZ
+i6GCPSeItMWRz0Sm5O6yFJ4g8kqyilBtnt87QcxfERJqVPF77OZ4a5LNxJK4At7U
+TxEG+qd1DahCS82Kw9LSZjIgLysbO+P/gYIRfvvAeiplolmMWoVEGGYtFJhRoy6S
+YqVk3Ius4lUY6/+2nkK66ittvJZGlfv3xWiphobnae8mwIPZIdr6YYpnEuIXheXj
+fwIDAQAB
 -----END PUBLIC KEY-----"""
 
 
@@ -71,6 +75,28 @@ def mock_settings(monkeypatch):
     monkeypatch.setattr("app.services.jwt_service.settings.jwt_access_token_expire_minutes", 15)
     monkeypatch.setattr("app.services.jwt_service.settings.jwt_refresh_token_expire_days", 7)
 
+@pytest.fixture
+def fake_redis():
+    try:
+        import fakeredis.aioredis
+        return fakeredis.aioredis.FakeRedis(decode_responses=True)
+    except ImportError:
+        pytest.skip("fakeredis not installed")
+
+# ─── Helper Functions ─────────────────────────────────────
+
+def _make_request(*, current_user: CurrentUser | None = None) -> Request:
+    """get_current_user unit testleri için minimal Starlette Request."""
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/auth/me",
+        "headers": [],
+        "query_string": b"",
+    }
+    request = Request(scope)
+    request.state.current_user = current_user
+    return request
 
 # ─── Password Service Tests ───────────────────────────────
 
@@ -153,19 +179,74 @@ class TestJWTService:
         import re
         assert re.match(r'^[A-Za-z0-9_-]+$', token)
 
+    def test_access_token_roundtrip(self, mock_settings):
+        user_id = uuid.uuid4()
+        token = jwt_service.create_access_token(user_id, "user@example.com")
+        payload = jwt_service.decode_access_token(token)
+        assert payload["sub"] == str(user_id)
+        assert payload["email"] == "user@example.com"
+        assert payload["type"] == "access"
+        assert payload["org_id"] is None
+        assert payload["jti"]
+        assert payload["exp"] > payload["iat"]
+        
+    def test_access_token_with_org_claims(self, mock_settings):
+        user_id = uuid.uuid4()
+        org_id = uuid.uuid4()
+        token = jwt_service.create_access_token(
+            user_id, "user@example.com",
+            org_id=org_id, org_slug="acme", role="admin",
+        )
+        payload = jwt_service.decode_access_token(token)
+        assert payload["org_id"] == str(org_id)
+        assert payload["org_slug"] == "acme"
+        assert payload["role"] == "admin"
+
+    def test_refresh_token_roundtrip(self, mock_settings):
+        user_id = uuid.uuid4()
+        token, jti = jwt_service.create_refresh_token(user_id)
+        payload = jwt_service.decode_refresh_token(token)
+        assert payload["sub"] == str(user_id)
+        assert payload["type"] == "refresh"
+        assert payload["jti"] == jti
+
+    def test_decode_access_as_refresh_raises(self, mock_settings):
+        token = jwt_service.create_access_token(uuid.uuid4(), "a@b.com")
+        with pytest.raises(UnauthorizedError) as exc:
+            jwt_service.decode_refresh_token(token)
+        assert exc.value.code == "INVALID_TOKEN"
+
+    def test_decode_garbage_token_raises(self, mock_settings):
+        with pytest.raises(UnauthorizedError):
+            jwt_service.decode_access_token("not.a.jwt")
+
+    def test_expired_access_token_raises(self, mock_settings):
+        from jose import jwt as jose_jwt
+
+        from app.services.jwt_service import ALGORITHM
+
+        past = int((datetime.now(UTC) - timedelta(minutes=5)).timestamp())
+        payload = {
+            "sub": str(uuid.uuid4()),
+            "email": "a@b.com",
+            "type": "access",
+            "jti": str(uuid.uuid4()),
+            "iat": past - 3600,
+            "exp": past,
+        }
+        token = jose_jwt.encode(
+            payload, jwt_service.settings.jwt_private_key, algorithm=ALGORITHM
+        )
+        with pytest.raises(UnauthorizedError) as exc:
+            jwt_service.decode_access_token(token)
+        assert exc.value.code == "INVALID_TOKEN"
+
+
 
 # ─── Token Store Tests ────────────────────────────────────
 
 class TestTokenStore:
     """fakeredis ile test — gerçek Redis bağlantısı gerekmez."""
-
-    @pytest.fixture
-    def fake_redis(self):
-        try:
-            import fakeredis.aioredis
-            return fakeredis.aioredis.FakeRedis(decode_responses=True)
-        except ImportError:
-            pytest.skip("fakeredis not installed")
 
     @pytest.mark.asyncio
     async def test_store_and_get_refresh_token(self, fake_redis, monkeypatch):
@@ -245,3 +326,109 @@ class TestTokenStore:
         # user2 etkilenmez
         allowed2, _ = await check_rate_limit(fake_redis, "login", "user2@test.com")
         assert allowed2 is True
+
+
+# ─── Auth Context Tests ───────────────────────────────────
+
+class TestAuthContext:
+    @pytest.mark.asyncio
+    async def test_resolve_valid_token_returns_current_user(
+        self, mock_settings, fake_redis
+    ):
+        user_id = uuid.uuid4()
+        token = jwt_service.create_access_token(user_id, "user@example.com")
+
+        user = await resolve_user_from_token(token, fake_redis)
+
+        assert user is not None
+        assert user.user_id == user_id
+        assert user.email == "user@example.com"
+        assert user.org_id is None
+        assert user.jti
+
+    @pytest.mark.asyncio
+    async def test_resolve_invalid_token_returns_none(self, mock_settings, fake_redis):
+        user = await resolve_user_from_token("not.a.jwt", fake_redis)
+        assert user is None
+
+    @pytest.mark.asyncio
+    async def test_resolve_blacklisted_token_returns_none(
+        self, mock_settings, fake_redis, monkeypatch
+    ):
+        from app.services.token_store import blacklist_access_token
+
+        monkeypatch.setattr(
+            "app.services.token_store.settings.jwt_access_token_expire_minutes", 15
+        )
+        user_id = uuid.uuid4()
+        token = jwt_service.create_access_token(user_id, "user@example.com")
+        payload = jwt_service.decode_access_token(token)
+
+        await blacklist_access_token(fake_redis, payload["jti"])
+
+        user = await resolve_user_from_token(token, fake_redis)
+        assert user is None
+
+    @pytest.mark.asyncio
+    async def test_resolve_refresh_token_returns_none(self, mock_settings, fake_redis):
+        user_id = uuid.uuid4()
+        token, _ = jwt_service.create_refresh_token(user_id)
+
+        # refresh token access decode ile parse edilemez → None
+        user = await resolve_user_from_token(token, fake_redis)
+        assert user is None
+
+# ─── Get Current User (deps) Tests ────────────────────────
+
+class TestGetCurrentUser:
+    @pytest.mark.asyncio
+    async def test_returns_state_user_when_middleware_set(self, fake_redis):
+        expected = CurrentUser(
+            user_id=uuid.uuid4(),
+            email="mw@example.com",
+            jti=str(uuid.uuid4()),
+        )
+        request = _make_request(current_user=expected)
+
+        user = await get_current_user(
+            request, access_token=None, redis=fake_redis
+        )
+
+        assert user is expected
+
+    @pytest.mark.asyncio
+    async def test_resolves_from_cookie_when_state_empty(
+        self, mock_settings, fake_redis
+    ):
+        user_id = uuid.uuid4()
+        token = jwt_service.create_access_token(user_id, "cookie@example.com")
+        request = _make_request()  # state boş
+
+        user = await get_current_user(
+            request, access_token=token, redis=fake_redis
+        )
+
+        assert user.user_id == user_id
+        assert user.email == "cookie@example.com"
+
+    @pytest.mark.asyncio
+    async def test_raises_when_no_cookie_and_no_state(self, fake_redis):
+        request = _make_request()
+
+        with pytest.raises(UnauthorizedError) as exc:
+            await get_current_user(
+                request, access_token=None, redis=fake_redis
+            )
+
+        assert exc.value.code == "INVALID_TOKEN"
+
+    @pytest.mark.asyncio
+    async def test_raises_when_cookie_invalid(self, mock_settings, fake_redis):
+        request = _make_request()
+
+        with pytest.raises(UnauthorizedError) as exc:
+            await get_current_user(
+                request, access_token="bad.token.here", redis=fake_redis
+            )
+
+        assert exc.value.code == "INVALID_TOKEN"

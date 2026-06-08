@@ -13,7 +13,7 @@
 |---|---|---|---|
 | M1 | Proje iskeleti + Docker | 3-5 saat | Her servis ayağa kalkar |
 | M2 | DB şeması + migrations | 2-3 saat | Tablolar oluşur |
-| M3 | Auth — Faz 1 (core) | 6-10 saat | Register/login/logout, JWT, `/me` — ✅ kod tamam, testler kısmi |
+| M3 | Auth — Faz 1 (core) | 6-10 saat | Register/login/logout, JWT, `/me` — ✅ tamam |
 | M4 | Auth — Faz 2 (session) | 3-5 saat | Switch-org, refresh, /me çalışır |
 | M5 | Auth — Faz 3 (org + davet) | 6-8 saat | Org CRUD, davet sistemi çalışır |
 | M6 | RBAC middleware | 3-4 saat | Tüm endpoint'ler role göre korunur |
@@ -148,10 +148,10 @@ Ayrıntılı açıklamalar: [m2-db-schema.md](./m2-db-schema.md#m2-doğrulama-re
 - [x] Pydantic request/response schema'ları
 - [x] Global hata formatı (`AppError` + Pydantic `VALIDATION_ERROR`)
 
-*Testler (kalan):*
-- [ ] JWT encode/decode unit testleri (`mock_settings`)
-- [ ] `auth_context` / `get_current_user` unit testleri
-- [ ] Integration: register → login → logout → `/me`
+*Testler:*
+- [x] JWT encode/decode unit testleri (`mock_settings`)
+- [x] `auth_context` / `get_current_user` unit testleri
+- [x] Integration: register → login → logout → `/me` (`tests/integration/test_auth_flow.py`)
 
 **Tamamlanma kriteri:**
 - Register → email doğrulama bekleniyor
@@ -632,7 +632,7 @@ async def client(db, redis):
 |---|---|---|---|
 | M1 — Docker/iskelet | — | Health check | — |
 | M2 — DB schema | Model validasyonları | Migration çalışıyor | — |
-| M3 — Auth core | JWTService, PasswordService, auth_context, AuthMiddleware | Register/login/logout/`/me` — kod ✅, integration test kalan | [m3-auth-core.md](./m3-auth-core.md) |
+| M3 — Auth core | JWTService, PasswordService, auth_context, deps | Register/login/logout/`/me` (`test_auth_flow.py`) | [m3-auth-core.md](./m3-auth-core.md) |
 | M4 — Session | Token rotation, switch-org mantığı | Refresh, /me, switch-org | — |
 | M5 — Org + davet | Davet token mantığı | Davet akışı baştan sona | — |
 | M6 — RBAC | Her rol her aksiyon | Forbidden senaryoları | — |

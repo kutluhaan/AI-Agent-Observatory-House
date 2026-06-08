@@ -70,7 +70,7 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 |-----------|--------|--------|
 | **M1** | Project skeleton, Docker, health checks | ✅ Done |
 | **M2** | Database schema + Alembic migrations | ✅ Done |
-| **M3** | Auth core (register/login/logout, JWT, `/me`) | ✅ Done (tests pending) |
+| **M3** | Auth core (register/login/logout, JWT, `/me`) | ✅ Done |
 | **M4–M6** | Session, orgs, RBAC | Planned |
 | **M7–M12** | Providers, traces, agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
@@ -227,22 +227,23 @@ All three must pass with no errors for M2 to be considered complete.
 
 ### M3 verification (repo root)
 
-Dev stack must be running. Implementation details: [docs/spec/m3-auth-core.md — M3 Doğrulama](docs/spec/m3-auth-core.md#m3-doğrulama-repo-kökünden).
+Dev stack must be running. Details: [docs/spec/m3-auth-core.md — M3 Doğrulama](docs/spec/m3-auth-core.md#m3-doğrulama-repo-kökünden).
 
 ```bash
-# 1. M3 service unit tests
+# 1. M3 auth unit tests (password, JWT, token_store, auth_context, deps)
 docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_m3_services.py -v
 
 # 2. All unit tests
 docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/ -v
 
-# 3. Auth smoke (manual)
+# 3. Auth integration tests (register → login → /me → logout)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_auth_flow.py -v -m integration
+
+# 4. Auth smoke (manual)
 curl http://localhost:8000/health
 curl http://localhost:8000/auth/me
 # → 401 without cookie; 200 after login with cookie
 ```
-
-Integration auth flow test (`register → login → logout`) is not yet in the suite — see open items in m3-auth-core.md.
 
 ### Health check
 
