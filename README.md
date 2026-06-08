@@ -70,7 +70,8 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 |-----------|--------|--------|
 | **M1** | Project skeleton, Docker, health checks | ✅ Done |
 | **M2** | Database schema + Alembic migrations | ✅ Done |
-| **M3–M6** | Auth, orgs, RBAC | Planned |
+| **M3** | Auth core (register/login/logout, JWT, `/me`) | ✅ Done (tests pending) |
+| **M4–M6** | Session, orgs, RBAC | Planned |
 | **M7–M12** | Providers, traces, agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
 
@@ -168,7 +169,7 @@ cp .env.example .env   # recommended when adding real secrets
 Important groups:
 
 - **Postgres / ClickHouse** — database credentials  
-- **JWT (RS256)** — required when auth milestones land; generate with OpenSSL (see comments in `.env.example`)  
+- **JWT (RS256)** — required for auth (M3+); generate with OpenSSL (see [m3-auth-core.md](docs/spec/m3-auth-core.md#rs256-key-üretimi))  
 - **Resend** — transactional email (verification, invites, password reset)  
 - **OpenAI / Anthropic / Ollama** — model providers for agent milestones  
 
@@ -223,6 +224,25 @@ docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/ 
 ```
 
 All three must pass with no errors for M2 to be considered complete.
+
+### M3 verification (repo root)
+
+Dev stack must be running. Implementation details: [docs/spec/m3-auth-core.md — M3 Doğrulama](docs/spec/m3-auth-core.md#m3-doğrulama-repo-kökünden).
+
+```bash
+# 1. M3 service unit tests
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_m3_services.py -v
+
+# 2. All unit tests
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/ -v
+
+# 3. Auth smoke (manual)
+curl http://localhost:8000/health
+curl http://localhost:8000/auth/me
+# → 401 without cookie; 200 after login with cookie
+```
+
+Integration auth flow test (`register → login → logout`) is not yet in the suite — see open items in m3-auth-core.md.
 
 ### Health check
 

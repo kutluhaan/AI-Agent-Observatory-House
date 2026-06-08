@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -135,4 +136,25 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
             code="INTERNAL_SERVER_ERROR",
             message="An unexpected error occurred. Please try again later.",
         ),
+    )
+
+def _format_validation_fields(errors: list) -> list[dict]:
+    fields = []
+    for err in errors:
+        loc = err.get("loc", ())
+        parts = [str(x) for x in loc if x != "body"]
+        fields.append({
+            "field": ".".join(parts) if parts else "request",
+            "message": err.get("msg", "Invalid value."),
+        })
+    return fields
+
+
+async def request_validation_error_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    return await app_error_handler(
+        request,
+        ValidationError(_format_validation_fields(exc.errors())),
     )

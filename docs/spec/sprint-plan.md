@@ -13,7 +13,7 @@
 |---|---|---|---|
 | M1 | Proje iskeleti + Docker | 3-5 saat | Her servis ayağa kalkar |
 | M2 | DB şeması + migrations | 2-3 saat | Tablolar oluşur |
-| M3 | Auth — Faz 1 (core) | 6-10 saat | Register/login/logout çalışır |
+| M3 | Auth — Faz 1 (core) | 6-10 saat | Register/login/logout, JWT, `/me` — ✅ kod tamam, testler kısmi |
 | M4 | Auth — Faz 2 (session) | 3-5 saat | Switch-org, refresh, /me çalışır |
 | M5 | Auth — Faz 3 (org + davet) | 6-8 saat | Org CRUD, davet sistemi çalışır |
 | M6 | RBAC middleware | 3-4 saat | Tüm endpoint'ler role göre korunur |
@@ -128,39 +128,47 @@ Ayrıntılı açıklamalar: [m2-db-schema.md](./m2-db-schema.md#m2-doğrulama-re
 **Yapılacaklar:**
 
 *Services:*
-- [ ] `JWTService` — RS256 key pair üret, token üret/doğrula
-- [ ] `PasswordService` — Argon2id hash/verify
-- [ ] `RedisTokenService` — whitelist/blacklist yönetimi
+- [x] `JWTService` — RS256 key pair üret, token üret/doğrula
+- [x] `PasswordService` — Argon2id hash/verify
+- [x] `RedisTokenService` (`token_store.py`) — whitelist/blacklist yönetimi
+- [x] `auth_context.py` — `resolve_user_from_token`, `CurrentUser`
 
 *Endpoints:*
-- [ ] `POST /auth/register`
-- [ ] `POST /auth/login`
-- [ ] `POST /auth/logout`
+- [x] `POST /auth/register`
+- [x] `POST /auth/login`
+- [x] `POST /auth/logout`
+- [x] `GET /auth/me` — auth-spec response (M3 kapanış kriteri; M4 overlap)
 
 *Middleware:*
-- [ ] `AuthMiddleware` — cookie'den token al, doğrula, `request.state`'e ekle
-- [ ] `get_current_user` FastAPI dependency
+- [x] `AuthMiddleware` — cookie'den token al, doğrula, `request.state`'e ekle
+- [x] `get_current_user` FastAPI dependency
 
 *Diğer:*
-- [ ] RS256 private/public key üretimi ve `.env`'e ekleme
-- [ ] Pydantic request/response schema'ları
-- [ ] Global hata formatı (`{"success": false, "error": {...}}`)
+- [x] RS256 private/public key üretimi ve `.env`'e ekleme
+- [x] Pydantic request/response schema'ları
+- [x] Global hata formatı (`AppError` + Pydantic `VALIDATION_ERROR`)
+
+*Testler (kalan):*
+- [ ] JWT encode/decode unit testleri (`mock_settings`)
+- [ ] `auth_context` / `get_current_user` unit testleri
+- [ ] Integration: register → login → logout → `/me`
 
 **Tamamlanma kriteri:**
 - Register → email doğrulama bekleniyor
 - Login → access + refresh token cookie set ediliyor
 - Logout → token'lar geçersiz kılınıyor
-- Korumalı endpoint'e token olmadan istek → 401
+- Korumalı endpoint'e token olmadan istek → 401 (`GET /auth/me`)
+
+**Doğrulama:** [m3-auth-core.md](./m3-auth-core.md#m3-doğrulama-repo-kökünden)
 
 ---
 
 ## M4 — Auth Faz 2: Session Management
 
-**Hedef:** Token refresh, org geçişi, kullanıcı bilgisi çalışır.
+**Hedef:** Token refresh, org geçişi, email doğrulama çalışır.
 
 **Yapılacaklar:**
 - [ ] `POST /auth/refresh` — token rotation
-- [ ] `GET /auth/me` — org listesiyle birlikte
 - [ ] `POST /auth/switch-org` — yeni org için token üret
 - [ ] `POST /auth/verify-email` — email doğrulama
 - [ ] `POST /auth/resend-verification`
@@ -624,7 +632,7 @@ async def client(db, redis):
 |---|---|---|---|
 | M1 — Docker/iskelet | — | Health check | — |
 | M2 — DB schema | Model validasyonları | Migration çalışıyor | — |
-| M3 — Auth core | JWTService, PasswordService | Register/login/logout akışı | — |
+| M3 — Auth core | JWTService, PasswordService, auth_context, AuthMiddleware | Register/login/logout/`/me` — kod ✅, integration test kalan | [m3-auth-core.md](./m3-auth-core.md) |
 | M4 — Session | Token rotation, switch-org mantığı | Refresh, /me, switch-org | — |
 | M5 — Org + davet | Davet token mantığı | Davet akışı baştan sona | — |
 | M6 — RBAC | Her rol her aksiyon | Forbidden senaryoları | — |
