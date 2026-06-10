@@ -53,8 +53,16 @@ async def get_refresh_token_user(
     return await redis.get(_refresh_key(jti))
 
 
+async def consume_refresh_token(redis: aioredis.Redis, jti: str) -> str | None:
+    """
+    Atomik GET+DELETE — rotation'da tek kullanımlık tüketim.
+    None dönerse token zaten revoke edilmiş veya hiç yoktu.
+    """
+    return await redis.getdel(_refresh_key(jti))
+
+
 async def revoke_refresh_token(redis: aioredis.Redis, jti: str) -> None:
-    """Logout veya token rotation'da refresh token'ı whitelist'ten siler."""
+    """Logout'ta refresh token'ı whitelist'ten siler."""
     await redis.delete(_refresh_key(jti))
 
 
@@ -96,6 +104,13 @@ async def store_pwd_reset_token(
     user_id: str,
 ) -> None:
     await redis.set(_pwd_reset_key(token_hash), user_id, ex=1800)  # 30 dakika
+
+async def get_email_verify_user(
+    redis: aioredis.Redis,
+    token_hash: str,
+) -> str | None:
+    """Verify-email Redis fast-path — password reset pattern ile simetrik."""
+    return await redis.get(_email_verify_key(token_hash))
 
 
 async def get_pwd_reset_user(

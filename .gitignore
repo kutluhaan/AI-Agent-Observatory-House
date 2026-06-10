@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# .gitignore'a ekle
+tests/test_private.pem
+tests/test_public.pem

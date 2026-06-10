@@ -65,3 +65,17 @@ class LoginResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+# ─── M4 Request Schemas ───────────────────────────────────
+
+class SwitchOrgRequest(BaseModel):
+    org_id: uuid.UUID
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr

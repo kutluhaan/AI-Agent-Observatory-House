@@ -1,7 +1,8 @@
 """
-Auth Router — M3 kapsamı: register, login, logout, me.
+Auth Router — M3 + M4
 
-M4'te eklenecekler: refresh, switch-org, verify-email, resend-verification
+M3: register, login, logout, me
+M4: refresh, switch-org, verify-email, resend-verification
 M5'te eklenecekler: org endpoints
 """
 import uuid
@@ -9,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Cookie, Depends, Request, Response
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,24 +18,36 @@ from app.api.deps import CurrentUser, get_current_user
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.email import send_verification_email
 from app.core.redis import get_redis
 from app.core.responses import (
+    AppError,
     ConflictError,
     ForbiddenError,
+    NotFoundError,
     RateLimitError,
     UnauthorizedError,
     success,
-    NotFoundError,
 )
 from app.models.auth import EmailVerification, RefreshToken
-from app.models.organization import OrganizationMember
+from app.models.organization import Organization, OrganizationMember
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest
+from app.schemas.auth import (
+    LoginRequest,
+    RegisterRequest,
+    ResendVerificationRequest,
+    SwitchOrgRequest,
+    VerifyEmailRequest,
+)
 from app.services import jwt_service
 from app.services.password_service import hash_password, validate_password_strength, verify_password
 from app.services.token_store import (
     blacklist_access_token,
     check_rate_limit,
+    consume_refresh_token,
+    get_email_verify_user,
+    get_refresh_token_user,
+    revoke_email_verify_token,
     revoke_refresh_token,
     store_email_verify_token,
     store_refresh_token,
@@ -79,6 +92,32 @@ def _set_auth_cookies(
 def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token", path="/auth/refresh")
+
+
+async def get_active_orgs(db: AsyncSession, user_id: uuid.UUID) -> list[OrganizationMember]:
+    """Aktif org üyelikleri — en eski joined_at önce (login/refresh fallback için deterministik)."""
+    result = await db.execute(
+        select(OrganizationMember)
+        .where(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization.has(Organization.is_active.is_(True)),
+        )
+        .options(selectinload(OrganizationMember.organization))
+        .order_by(OrganizationMember.joined_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+def resolve_active_org(
+    active_orgs: list[OrganizationMember],
+    preferred_org_id: uuid.UUID | None,
+) -> OrganizationMember | None:
+    """Refresh sırasında geçerli access token org'u korunur; değilse ilk aktif org."""
+    if preferred_org_id:
+        for membership in active_orgs:
+            if membership.organization_id == preferred_org_id:
+                return membership
+    return active_orgs[0] if active_orgs else None
 
 
 # ─── POST /auth/register ──────────────────────────────────
@@ -131,8 +170,7 @@ async def register(
     # Redis'e yaz
     await store_email_verify_token(redis, token_hash, str(user.id))
 
-    # TODO: M4 — email servisi entegrasyonu (Resend)
-    # await email_service.send_verification(user.email, raw_token)
+    await send_verification_email(user.email, raw_token)
 
     return success({
         "message": "Registration successful. Please verify your email.",
@@ -173,14 +211,7 @@ async def login(
     if not user.is_active:
         raise ForbiddenError("ACCOUNT_DISABLED", "This account has been disabled.")
 
-    # Kullanıcının org'larını getir (M3'te genellikle boş — org henüz yok)
-    org_result = await db.execute(
-        select(OrganizationMember)
-        .where(OrganizationMember.user_id == user.id)
-        .options(selectinload(OrganizationMember.organization))
-    )
-    memberships = org_result.scalars().all()
-    active_orgs = [m for m in memberships if m.organization.is_active]
+    active_orgs = await get_active_orgs(db, user.id)
     first_org = active_orgs[0] if active_orgs else None
 
     # Token üret
@@ -276,6 +307,250 @@ async def logout(
     return success({"message": "Logged out successfully."})
 
 
+# ─── POST /auth/refresh ───────────────────────────────────
+
+@router.post("/refresh")
+async def refresh(
+    request: Request,
+    response: Response,
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    if not refresh_token:
+        raise UnauthorizedError("INVALID_TOKEN", "Refresh token missing.")
+
+    try:
+        payload = jwt_service.decode_refresh_token(refresh_token)
+    except UnauthorizedError:
+        raise
+
+    allowed, retry_after = await check_rate_limit(redis, "refresh", payload["sub"])
+    if not allowed:
+        raise RateLimitError(retry_after)
+
+    jti = payload["jti"]
+    if not await get_refresh_token_user(redis, jti):
+        raise UnauthorizedError("REFRESH_TOKEN_REVOKED", "Refresh token has been revoked.")
+
+    result = await db.execute(select(User).where(User.id == uuid.UUID(payload["sub"])))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise UnauthorizedError("INVALID_TOKEN", "User not found or disabled.")
+
+    old_token_hash = jwt_service.hash_token(refresh_token)
+
+    rt_result = await db.execute(
+        select(RefreshToken)
+        .where(
+            RefreshToken.token_hash == old_token_hash,
+            RefreshToken.is_revoked.is_(False),
+            RefreshToken.expires_at > datetime.now(UTC),
+        )
+        .with_for_update()
+    )
+    old_rt = rt_result.scalar_one_or_none()
+    if not old_rt:
+        raise UnauthorizedError("REFRESH_TOKEN_REVOKED", "Refresh token has been revoked.")
+
+    old_rt.is_revoked = True
+    old_rt.revoked_at = datetime.now(UTC)
+
+    preferred_org_id: uuid.UUID | None = None
+    if access_token:
+        try:
+            access_payload = jwt_service.decode_access_token(access_token)
+            raw_org_id = access_payload.get("org_id")
+            if raw_org_id:
+                preferred_org_id = uuid.UUID(raw_org_id)
+        except UnauthorizedError:
+            pass
+
+    active_orgs = await get_active_orgs(db, user.id)
+    chosen_org = resolve_active_org(active_orgs, preferred_org_id)
+
+    new_access = jwt_service.create_access_token(
+        user_id=user.id,
+        email=user.email,
+        org_id=chosen_org.organization_id if chosen_org else None,
+        org_slug=chosen_org.organization.slug if chosen_org else None,
+        role=chosen_org.role if chosen_org else None,
+    )
+    new_raw_refresh, new_jti = jwt_service.create_refresh_token(user.id)
+    new_token_hash = jwt_service.hash_token(new_raw_refresh)
+
+    db.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=new_token_hash,
+            device_info=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+            expires_at=datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days),
+        )
+    )
+    await db.commit()
+
+    # Redis: eski jti atomik tüket (commit sonrası), sonra yeni jti yaz
+    await consume_refresh_token(redis, jti)
+    await store_refresh_token(redis, new_jti, str(user.id))
+    _set_auth_cookies(response, new_access, new_raw_refresh)
+
+    return success({"message": "Token refreshed."})
+
+
+# ─── POST /auth/switch-org ────────────────────────────────
+
+@router.post("/switch-org")
+async def switch_org(
+    body: SwitchOrgRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    allowed, retry_after = await check_rate_limit(redis, "switch_org", str(current_user.user_id))
+    if not allowed:
+        raise RateLimitError(retry_after)
+
+    org_result = await db.execute(select(Organization).where(Organization.id == body.org_id))
+    org = org_result.scalar_one_or_none()
+    if not org:
+        raise NotFoundError("ORGANIZATION_NOT_FOUND", "Organization not found.")
+
+    member_result = await db.execute(
+        select(OrganizationMember).where(
+            OrganizationMember.user_id == current_user.user_id,
+            OrganizationMember.organization_id == body.org_id,
+        )
+    )
+    membership = member_result.scalar_one_or_none()
+    if not membership:
+        raise ForbiddenError("NOT_A_MEMBER", "You are not a member of this organization.")
+
+    if not org.is_active:
+        raise ForbiddenError("ORG_DEACTIVATED", "This organization has been deactivated.")
+
+    new_access = jwt_service.create_access_token(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        org_id=org.id,
+        org_slug=org.slug,
+        role=membership.role,
+    )
+
+    is_prod = settings.is_production
+    response.set_cookie(
+        key="access_token",
+        value=new_access,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=settings.jwt_access_token_expire_minutes * 60,
+    )
+
+    return success({
+        "organization": {
+            "id": str(org.id),
+            "name": org.name,
+            "slug": org.slug,
+        },
+        "role": membership.role,
+    })
+
+
+# ─── POST /auth/verify-email ──────────────────────────────
+
+@router.post("/verify-email")
+async def verify_email(
+    body: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    token_hash = jwt_service.hash_token(body.token)
+
+    redis_user_id = await get_email_verify_user(redis, token_hash)
+    if not redis_user_id:
+        raise AppError(
+            "EMAIL_VERIFICATION_EXPIRED",
+            "Verification link is invalid or has expired.",
+            410,
+        )
+
+    result = await db.execute(
+        select(EmailVerification).where(
+            EmailVerification.token_hash == token_hash,
+            EmailVerification.used_at.is_(None),
+        )
+    )
+    verification = result.scalar_one_or_none()
+
+    if (
+        not verification
+        or verification.expires_at < datetime.now(UTC)
+        or str(verification.user_id) != redis_user_id
+    ):
+        raise AppError(
+            "EMAIL_VERIFICATION_EXPIRED",
+            "Verification link is invalid or has expired.",
+            410,
+        )
+
+    verification.used_at = datetime.now(UTC)
+    await db.execute(
+        sa_update(User)
+        .where(User.id == verification.user_id)
+        .values(is_verified=True)
+    )
+    await db.commit()
+
+    await revoke_email_verify_token(redis, token_hash)
+
+    return success({"message": "Email verified successfully."})
+
+
+# ─── POST /auth/resend-verification ───────────────────────
+
+@router.post("/resend-verification")
+async def resend_verification(
+    body: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    allowed, retry_after = await check_rate_limit(redis, "resend_verify", body.email)
+    if not allowed:
+        raise RateLimitError(retry_after)
+
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user and not user.is_verified and user.is_active:
+        await db.execute(
+            sa_update(EmailVerification)
+            .where(
+                EmailVerification.user_id == user.id,
+                EmailVerification.used_at.is_(None),
+            )
+            .values(used_at=datetime.now(UTC))
+        )
+
+        raw_token = jwt_service.generate_secure_token()
+        token_hash = jwt_service.hash_token(raw_token)
+        db.add(
+            EmailVerification(
+                user_id=user.id,
+                token_hash=token_hash,
+                expires_at=datetime.now(UTC) + timedelta(hours=24),
+            )
+        )
+        await db.commit()
+
+        await store_email_verify_token(redis, token_hash, str(user.id))
+        await send_verification_email(user.email, raw_token)
+
+    return success({"message": "If this email exists, a verification link has been sent."})
+
+
 @router.get("/me")
 async def get_me(
     user: CurrentUser = Depends(get_current_user),
@@ -286,13 +561,7 @@ async def get_me(
     if not db_user:
         raise NotFoundError("USER_NOT_FOUND", "User not found.")
 
-    org_result = await db.execute(
-        select(OrganizationMember)
-        .where(OrganizationMember.user_id == user.user_id)
-        .options(selectinload(OrganizationMember.organization))
-    )
-    memberships = org_result.scalars().all()
-    active_orgs = [m for m in memberships if m.organization.is_active]
+    active_orgs = await get_active_orgs(db, user.user_id)
 
     return success({
         "id": str(db_user.id),

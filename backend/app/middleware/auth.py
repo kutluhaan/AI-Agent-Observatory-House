@@ -13,6 +13,9 @@ PUBLIC_PATHS = {
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/auth/refresh", 
+    "/auth/verify-email", 
+    "/auth/resend-verification",
 }
 
 

@@ -278,6 +278,42 @@ class TestTokenStore:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_consume_refresh_token_atomic(self, fake_redis, monkeypatch):
+        monkeypatch.setattr(
+            "app.services.token_store.settings.jwt_refresh_token_expire_days", 7
+        )
+        from app.services.token_store import (
+            consume_refresh_token,
+            get_refresh_token_user,
+            store_refresh_token,
+        )
+
+        jti = str(uuid.uuid4())
+        user_id = "user-456"
+        await store_refresh_token(fake_redis, jti, user_id)
+
+        assert await consume_refresh_token(fake_redis, jti) == user_id
+        assert await get_refresh_token_user(fake_redis, jti) is None
+        assert await consume_refresh_token(fake_redis, jti) is None
+
+    @pytest.mark.asyncio
+    async def test_store_and_get_email_verify_token(self, fake_redis):
+        from app.services.token_store import (
+            get_email_verify_user,
+            revoke_email_verify_token,
+            store_email_verify_token,
+        )
+
+        token_hash = "a" * 64
+        user_id = str(uuid.uuid4())
+
+        await store_email_verify_token(fake_redis, token_hash, user_id)
+        assert await get_email_verify_user(fake_redis, token_hash) == user_id
+
+        await revoke_email_verify_token(fake_redis, token_hash)
+        assert await get_email_verify_user(fake_redis, token_hash) is None
+
+    @pytest.mark.asyncio
     async def test_blacklist_access_token(self, fake_redis, monkeypatch):
         monkeypatch.setattr(
             "app.services.token_store.settings.jwt_access_token_expire_minutes", 15
