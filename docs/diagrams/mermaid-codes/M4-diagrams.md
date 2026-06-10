@@ -28,16 +28,19 @@ sequenceDiagram
                 API-->>UI: 401 REFRESH_TOKEN_REVOKED
             else Redis'te var
                 API->>DB: User getir, is_active kontrol
-                API->>DB: User org'larını getir
-                Note over API: TOKEN ROTATION BAŞLIYOR
-                API->>Redis: auth:refresh:{old_jti} sil
-                API->>DB: RefreshToken is_revoked=true, revoked_at=now
-                API->>JWT: create_access_token(user, org)
-                API->>JWT: create_refresh_token(user) → (raw, new_jti)
-                API->>DB: INSERT RefreshToken (new hash)
-                API->>Redis: auth:refresh:{new_jti} → user_id
-                API-->>UI: 200 + yeni httpOnly cookies
-                Note over UI: Kullanıcı hiçbir şey fark etmez
+                API->>DB: RefreshToken FOR UPDATE (hash, is_revoked=false, expires_at)
+                alt DB satırı yok veya revoke/expired
+                    API-->>UI: 401 REFRESH_TOKEN_REVOKED
+                else Geçerli
+                    Note over API: Org context — access_token org'u koru (geçerliyse)
+                    API->>DB: is_revoked=true, INSERT yeni RefreshToken
+                    API->>JWT: create_access_token + create_refresh_token
+                    API->>DB: COMMIT
+                    API->>Redis: consume_refresh_token (GETDEL old_jti)
+                    API->>Redis: auth:refresh:{new_jti} → user_id
+                    API-->>UI: 200 + yeni httpOnly cookies
+                    Note over UI: Kullanıcı hiçbir şey fark etmez
+                end
             end
         end
     end
@@ -83,16 +86,21 @@ sequenceDiagram
     API->>DEPS: get_current_user()
     DEPS-->>API: CurrentUser
     API->>Redis: rate limit (switch_org:{user_id}, 20/dk)
-    API->>DB: SELECT OrganizationMember WHERE user_id=? AND org_id=?
-    alt Üye değil
+    API->>DB: SELECT Organization WHERE id=?
+    alt Org yok
         API-->>UI: 404 ORGANIZATION_NOT_FOUND
-    else Org aktif değil
-        API-->>UI: 403 ORG_DEACTIVATED
-    else Üye ve aktif
-        API->>JWT: create_access_token(org_id, org_slug, role)
-        Note over API: Refresh token DEĞİŞMEZ
-        API-->>UI: 200 + yeni access_token cookie
-        UI-->>User: Yeni org context'inde dashboard
+    else Org var
+        API->>DB: SELECT OrganizationMember WHERE user_id=? AND org_id=?
+        alt Üye değil
+            API-->>UI: 403 NOT_A_MEMBER
+        else Org aktif değil
+            API-->>UI: 403 ORG_DEACTIVATED
+        else Üye ve aktif
+            API->>JWT: create_access_token(org_id, org_slug, role)
+            Note over API: Refresh token DEĞİŞMEZ
+            API-->>UI: 200 + yeni access_token cookie
+            UI-->>User: Yeni org context'inde dashboard
+        end
     end
 ```
 
@@ -113,17 +121,20 @@ sequenceDiagram
     User->>UI: Email'deki linke tıklar (?token=abc123)
     UI->>API: POST /auth/verify-email {token}
     API->>JWT: hash_token(token) → token_hash
-    API->>DB: SELECT EmailVerification WHERE token_hash=? AND used_at IS NULL
-    alt Token bulunamadı veya kullanılmış
+    API->>Redis: auth:email_verify:{hash} var mı?
+    alt Redis'te yok
         API-->>UI: 410 EMAIL_VERIFICATION_EXPIRED
-    else expires_at geçmiş
-        API-->>UI: 410 EMAIL_VERIFICATION_EXPIRED
-    else Geçerli
-        API->>DB: UPDATE EmailVerification SET used_at=now()
-        API->>DB: UPDATE User SET is_verified=true
-        API->>Redis: auth:email_verify:{hash} sil
-        API-->>UI: 200 "Email verified successfully."
-        UI-->>User: Login sayfasına yönlendir
+    else Redis'te var
+        API->>DB: SELECT EmailVerification WHERE token_hash=? AND used_at IS NULL
+        alt DB'de yok, expired veya user_id uyuşmaz
+            API-->>UI: 410 EMAIL_VERIFICATION_EXPIRED
+        else Geçerli
+            API->>DB: UPDATE EmailVerification SET used_at=now()
+            API->>DB: UPDATE User SET is_verified=true
+            API->>Redis: auth:email_verify:{hash} sil
+            API-->>UI: 200 "Email verified successfully."
+            UI-->>User: Login sayfasına yönlendir
+        end
     end
 ```
 
@@ -162,20 +173,22 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    ROOT["backend/app/"]
+    ROOT["backend/"]
 
-    ROOT --> CORE["core/"]
-    ROOT --> API["api/v1/"]
-    ROOT --> TESTS["tests/unit/"]
+    ROOT --> APP["app/"]
+    ROOT --> TESTS["tests/"]
 
-    CORE --> EMAIL["email.py\nResend entegrasyonu\nYENİ"]
-    CORE --> CFG["config.py\nM1 — değişmez"]
+    APP --> CORE["core/email.py\nYENİ"]
+    APP --> AUTH["api/v1/auth.py\nM3 + M4 endpoint'leri"]
+    APP --> MW["middleware/auth.py\nPUBLIC_PATHS"]
+    APP --> TS["services/token_store.py\nconsume_refresh_token"]
 
-    API --> AUTH["auth.py\nM3'ten genişledi\n+refresh\n+me\n+switch-org\n+verify-email\n+resend-verification"]
+    TESTS --> TU["unit/test_m4_services.py\nresolve_active_org"]
+    TESTS --> TI["integration/test_m4_auth_flow.py\nM4 akışları"]
+    TESTS --> TH["integration/auth_helpers.py\npaylaşılan fixture'lar"]
 
-    TESTS --> TM4["test_m4_endpoints.py\nYENİ"]
-
-    style EMAIL fill:#4ade80,stroke:#166534,color:#000
-    style TM4 fill:#4ade80,stroke:#166534,color:#000
+    style CORE fill:#4ade80,stroke:#166534,color:#000
+    style TU fill:#4ade80,stroke:#166534,color:#000
+    style TI fill:#4ade80,stroke:#166534,color:#000
     style AUTH fill:#60a5fa,stroke:#1e40af,color:#000
 ```

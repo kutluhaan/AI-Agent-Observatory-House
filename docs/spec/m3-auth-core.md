@@ -185,20 +185,15 @@ curl http://localhost:8000/health
 curl http://localhost:8000/auth/me
 # → 401 INVALID_TOKEN
 
-# register → DB'de is_verified=true → login → cookie ile /auth/me → 200
+# register → verify-email → login → cookie ile /me → 200
 ```
 
 > Integration conftest'te `clear_rate_limits` autouse fixture — her test öncesi Redis `ratelimit:*` key'lerini temizler.
 
 ---
 
-## Sonraki Adım (M4)
+## Sonraki Adım (M4) — tamamlandı
 
-M4'te eklenecekler:
-- `POST /auth/refresh` — token rotation
-- `POST /auth/switch-org` — org geçişi
-- `POST /auth/verify-email` — email doğrulama
-- `POST /auth/resend-verification`
-- Email servisi (Resend)
+M4 session management tamamlandı. Ayrıntılar: [m4-session-management.md](./m4-session-management.md)
 
-> **Not:** `GET /auth/me` M3'te auth-spec formatında implement edildi. M4'te ek org/session işlevleri gelir; endpoint zaten mevcut.
+> **Not:** `GET /auth/me` M3'te auth-spec formatında implement edildi. M4'te refresh/switch-org/verify-email eklendi; `/me` regression ile korunur.

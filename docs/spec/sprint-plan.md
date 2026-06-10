@@ -14,7 +14,7 @@
 | M1 | Proje iskeleti + Docker | 3-5 saat | Her servis ayağa kalkar |
 | M2 | DB şeması + migrations | 2-3 saat | Tablolar oluşur |
 | M3 | Auth — Faz 1 (core) | 6-10 saat | Register/login/logout, JWT, `/me` — ✅ tamam |
-| M4 | Auth — Faz 2 (session) | 3-5 saat | Switch-org, refresh, /me çalışır |
+| M4 | Auth — Faz 2 (session) | 3-5 saat | Refresh, switch-org, verify-email — ✅ tamam |
 | M5 | Auth — Faz 3 (org + davet) | 6-8 saat | Org CRUD, davet sistemi çalışır |
 | M6 | RBAC middleware | 3-4 saat | Tüm endpoint'ler role göre korunur |
 | M7 | Provider Layer | 4-6 saat | OpenAI, Anthropic, Ollama çalışır |
@@ -42,7 +42,7 @@
 - [ ] `frontend/` için Next.js 14 projesi (`app router`)
 - [ ] `docker-compose.yml` — PostgreSQL, ClickHouse, Redis, backend, frontend
 - [ ] Her servis için `Dockerfile`
-- [ ] `.env.example` dosyası
+- [x] `.env.example` dosyası
 - [ ] Backend health check endpoint: `GET /health`
 - [ ] Frontend'den backend'e bağlantı testi
 
@@ -168,16 +168,18 @@ Ayrıntılı açıklamalar: [m2-db-schema.md](./m2-db-schema.md#m2-doğrulama-re
 **Hedef:** Token refresh, org geçişi, email doğrulama çalışır.
 
 **Yapılacaklar:**
-- [ ] `POST /auth/refresh` — token rotation
-- [ ] `POST /auth/switch-org` — yeni org için token üret
-- [ ] `POST /auth/verify-email` — email doğrulama
-- [ ] `POST /auth/resend-verification`
-- [ ] Email servisi entegrasyonu (Resend veya SMTP)
+- [x] `POST /auth/refresh` — token rotation (`FOR UPDATE`, commit sonrası `consume_refresh_token`)
+- [x] `POST /auth/switch-org` — yeni org için access token (403 `NOT_A_MEMBER`, 404 org yok)
+- [x] `POST /auth/verify-email` — Redis fast-path + DB doğrulama
+- [x] `POST /auth/resend-verification` — enumeration koruması (her zaman 200)
+- [x] Email servisi entegrasyonu (Resend, `asyncio.to_thread`)
 
 **Tamamlanma kriteri:**
 - Refresh token rotation çalışıyor, eski token geçersiz
 - Switch-org sonrası token'da yeni org_id ve role var
 - Email doğrulama linki çalışıyor
+
+**Doğrulama:** [m4-session-management.md](./m4-session-management.md#m4-doğrulama-repo-kökünden)
 
 ---
 
@@ -474,20 +476,24 @@ async def delete_project(
 ```
 backend/
 └── tests/
-    ├── conftest.py          # Global fixture'lar, DB setup
     ├── unit/
-    │   ├── test_jwt_service.py
-    │   ├── test_password_service.py
-    │   ├── test_rbac.py
-    │   ├── test_provider_layer.py
-    │   └── test_trace_collector.py
+    │   ├── test_m3_services.py       # JWT, password, token_store, auth_context, deps
+    │   ├── test_m4_services.py       # resolve_active_org
+    │   ├── test_models.py
+    │   ├── test_rbac.py              # M6+
+    │   ├── test_provider_layer.py    # M7+
+    │   └── test_trace_collector.py   # M8+
     ├── integration/
-    │   ├── test_auth_endpoints.py
-    │   ├── test_org_endpoints.py
-    │   ├── test_invitation_flow.py
-    │   ├── test_agent_execution.py
-    │   ├── test_hitl_flow.py
-    │   └── test_test_runner.py
+    │   ├── conftest.py               # client, auth_user, clear_rate_limits
+    │   ├── auth_helpers.py           # register_and_verify, org seed
+    │   ├── test_auth_flow.py         # M3 regression
+    │   ├── test_m4_auth_flow.py      # M4 session endpoints
+    │   ├── test_migrations.py
+    │   ├── test_org_endpoints.py     # M5+
+    │   ├── test_invitation_flow.py   # M5+
+    │   ├── test_agent_execution.py   # M9+
+    │   ├── test_hitl_flow.py         # M10+
+    │   └── test_test_runner.py       # M11+
     └── e2e/
         ├── test_register_login_flow.py
         ├── test_org_invite_flow.py
@@ -633,7 +639,7 @@ async def client(db, redis):
 | M1 — Docker/iskelet | — | Health check | — |
 | M2 — DB schema | Model validasyonları | Migration çalışıyor | — |
 | M3 — Auth core | JWTService, PasswordService, auth_context, deps | Register/login/logout/`/me` (`test_auth_flow.py`) | [m3-auth-core.md](./m3-auth-core.md) |
-| M4 — Session | Token rotation, switch-org mantığı | Refresh, /me, switch-org | — |
+| M4 — Session | `resolve_active_org`, `consume_refresh_token` | `test_m4_auth_flow.py`, `test_auth_flow.py` regression | [m4-session-management.md](./m4-session-management.md) |
 | M5 — Org + davet | Davet token mantığı | Davet akışı baştan sona | — |
 | M6 — RBAC | Her rol her aksiyon | Forbidden senaryoları | — |
 | M7 — Provider | Mock LLM response | Streaming, tool call | — |

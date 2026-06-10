@@ -71,7 +71,8 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 | **M1** | Project skeleton, Docker, health checks | ✅ Done |
 | **M2** | Database schema + Alembic migrations | ✅ Done |
 | **M3** | Auth core (register/login/logout, JWT, `/me`) | ✅ Done |
-| **M4–M6** | Session, orgs, RBAC | Planned |
+| **M4** | Session (refresh, switch-org, verify-email, Resend) | ✅ Done |
+| **M5–M6** | Orgs, invitations, RBAC | Planned |
 | **M7–M12** | Providers, traces, agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
 
@@ -153,7 +154,7 @@ Details and time estimates: [docs/spec/sprint-plan.md](docs/spec/sprint-plan.md)
 ├── backend/          # API (FastAPI)
 ├── frontend/         # Web app (Next.js, src/app)
 ├── docs/
-│   ├── spec/         # auth-spec, sprint-plan
+│   ├── spec/         # auth-spec, sprint-plan, m3/m4 milestone docs
 │   └── diagrams/     # architecture & flow diagrams
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
@@ -243,6 +244,25 @@ docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/t
 curl http://localhost:8000/health
 curl http://localhost:8000/auth/me
 # → 401 without cookie; 200 after login with cookie
+```
+
+### M4 verification (repo root)
+
+Dev stack must be running. Details: [docs/spec/m4-session-management.md — M4 Doğrulama](docs/spec/m4-session-management.md#m4-doğrulama-repo-kökünden).
+
+```bash
+# 1. M4 unit tests (resolve_active_org + token_store helpers)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_m4_services.py tests/unit/test_m3_services.py -v
+
+# 2. M4 integration tests (refresh, switch-org, verify, resend)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_m4_auth_flow.py -v -m integration
+
+# 3. M3 auth regression (verify-email flow)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_auth_flow.py -v -m integration
+
+# 4. Smoke (manual)
+curl -X POST http://localhost:8000/auth/refresh
+# → 401 INVALID_TOKEN (no cookie)
 ```
 
 ### Health check

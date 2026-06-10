@@ -11,7 +11,7 @@ Email servisi (Resend) entegre edilir.
 |---|---|
 | `app/core/redis.py` | Token store operations |
 | `app/services/jwt_service.py` | Token üretimi ve doğrulama |
-| `app/services/token_store.py` | Whitelist/blacklist/rate limit |
+| `app/services/token_store.py` | Whitelist/blacklist/rate limit, `consume_refresh_token` |
 | `app/api/deps.py` | `get_current_user` dependency |
 | `app/middleware/auth.py` | `AuthMiddleware` — PUBLIC_PATHS güncellenir |
 | `app/models/auth.py` | `RefreshToken`, `EmailVerification` |
@@ -23,23 +23,29 @@ Email servisi (Resend) entegre edilir.
 
 ```
 backend/
-└── app/
-    ├── core/
-    │   └── email.py                  ← YENİ: Resend email servisi
-    ├── middleware/
-    │   └── auth.py                   ← GÜNCELLEME: PUBLIC_PATHS
-    ├── api/
-    │   └── v1/
-    │       └── auth.py               ← GÜNCELLEME: 4 yeni endpoint + register email
-    └── tests/
-        ├── unit/
-        │   └── test_m4_services.py   ← YENİ: rotation, verify mantığı
-        └── integration/
-            └── test_m4_auth_flow.py  ← YENİ: verify → refresh → switch-org akışları
+├── app/
+│   ├── core/
+│   │   └── email.py                  ← YENİ: Resend email servisi
+│   ├── middleware/
+│   │   └── auth.py                   ← GÜNCELLEME: PUBLIC_PATHS
+│   ├── api/v1/
+│   │   └── auth.py                   ← GÜNCELLEME: 4 endpoint + register email
+│   ├── schemas/
+│   │   └── auth.py                   ← GÜNCELLEME: M4 request modelleri
+│   └── services/
+│       └── token_store.py            ← GÜNCELLEME: consume_refresh_token, get_email_verify_user
+└── tests/
+    ├── unit/
+    │   ├── test_m3_services.py       ← GÜNCELLEME: consume_refresh_token, email verify Redis
+    │   └── test_m4_services.py       ← YENİ: resolve_active_org
+    └── integration/
+        ├── auth_helpers.py           ← YENİ: register_and_verify, org seed
+        ├── test_auth_flow.py         ← GÜNCELLEME: verify-email akışı (M3 regression)
+        └── test_m4_auth_flow.py      ← YENİ: refresh, switch-org, verify, resend
 ```
 
 ### `app/core/config.py` — Değişmez
-`RESEND_API_KEY` ve `EMAIL_FROM` zaten `.env.example`'da var.
+`RESEND_API_KEY` ve `EMAIL_FROM` `.env` / `.env.example` üzerinden okunur.
 
 ---
 
@@ -73,7 +79,7 @@ M3'ten gelen public path'ler değişmez: `/health`, `/auth/register`, `/auth/log
 
 ## Email Servisi
 
-Resend kullanılır. `RESEND_API_KEY` `.env`'den okunur.
+Resend kullanılır. `RESEND_API_KEY` `.env`'den okunur. SDK çağrısı `asyncio.to_thread` ile event loop'u bloklamaz.
 
 M4'te gönderilen emailler:
 - Email doğrulama linki (register sonrası ve `/auth/resend-verification`)
@@ -88,29 +94,31 @@ M4 kapsamı dışı (M5'te):
 `POST /auth/refresh` endpoint'i token rotation uygular:
 
 1. Refresh token cookie'den okunur
-2. RS256 ile decode edilir
-3. Redis whitelist'te (`auth:refresh:{jti}`) kontrol edilir
-4. **Eski token Redis'ten silinir** (rotation)
-5. DB'de `is_revoked=true` yapılır
-6. Yeni access + refresh token üretilir
-7. Yeni refresh token Redis'e ve DB'ye yazılır
-8. Her iki yeni token cookie olarak set edilir
+2. RS256 ile decode edilir (`REFRESH_TOKEN_EXPIRED` / `INVALID_TOKEN`)
+3. Rate limit kontrolü (`refresh`, user_id)
+4. Redis whitelist'te (`auth:refresh:{jti}`) hızlı kontrol
+5. DB: `RefreshToken` satırı `FOR UPDATE` ile kilitlenir — `is_revoked=false`, `expires_at` geçerli olmalı
+6. DB'de `is_revoked=true`, yeni `RefreshToken` INSERT
+7. `commit()`
+8. Redis: `consume_refresh_token` (atomik GETDEL) — eski jti silinir
+9. Redis: yeni jti whitelist'e yazılır
+10. Yeni access + refresh cookie set edilir
 
-Org context: mevcut `access_token` cookie'deki `org_id` hâlâ geçerli üyelikse korunur; değilse ilk aktif org'a düşülür.
+Org context: mevcut `access_token` cookie'deki `org_id` hâlâ geçerli üyelikse korunur; değilse `joined_at` en eski aktif org'a düşülür.
 
 ---
 
 ## Tamamlanma Kriterleri
 
-- [ ] `POST /auth/refresh` → eski token geçersiz, yeni cookie set edildi
-- [ ] `GET /auth/me` → M3 davranışı korunuyor (regression)
-- [ ] `POST /auth/switch-org` → token'da yeni org_id ve role var
-- [ ] `POST /auth/verify-email` → is_verified=true yapıldı
-- [ ] `POST /auth/resend-verification` → yeni token üretildi, email gönderildi
-- [ ] `PUBLIC_PATHS` güncellendi
-- [ ] Unit testler geçiyor (`test_m4_services.py`)
-- [ ] Integration testler geçiyor (`test_m4_auth_flow.py`)
-- [ ] M3 testleri hâlâ geçiyor (regression yok)
+- [x] `POST /auth/refresh` → eski token geçersiz, yeni cookie set edildi
+- [x] `GET /auth/me` → M3 davranışı korunuyor (regression)
+- [x] `POST /auth/switch-org` → token'da yeni org_id ve role var
+- [x] `POST /auth/verify-email` → is_verified=true yapıldı
+- [x] `POST /auth/resend-verification` → yeni token üretildi, email gönderildi
+- [x] `PUBLIC_PATHS` güncellendi
+- [x] Unit testler (`test_m4_services.py`, `test_m3_services.py` token/email)
+- [x] Integration testler (`test_m4_auth_flow.py`)
+- [x] M3 testleri hâlâ geçiyor (`test_auth_flow.py` regression)
 
 ---
 

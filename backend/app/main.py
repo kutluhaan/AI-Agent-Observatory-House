@@ -1,9 +1,10 @@
 """
 AI Agent Observatory — FastAPI Application
- 
+
 M1: Temel iskelet, health check
 M2: DB modelleri yüklendi (Base.metadata)
-M3: Redis bağlantısı, auth router (register, login, logout)
+M3: Redis bağlantısı, auth router (register, login, logout, /me)
+M4: refresh, switch-org, verify-email, resend-verification, Resend email
 """
 
 from contextlib import asynccontextmanager
