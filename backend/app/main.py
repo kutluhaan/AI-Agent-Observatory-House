@@ -91,6 +91,10 @@ from app.api.v1.invitations import router as inv_router
 app.include_router(org_router, prefix="/organizations", tags=["organizations"])
 app.include_router(inv_router, prefix="/invitations", tags=["invitations"])
 
+# M7: Providers router
+from app.api.v1.providers import router as providers_router
+app.include_router(providers_router, prefix="/providers", tags=["providers"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])

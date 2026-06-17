@@ -13,6 +13,7 @@ from app.models.auth import (
     OrganizationInvitation,
     OAuthAccount,
 )
+from app.models.provider import ProviderCredential
 
 __all__ = [
     "User",
@@ -23,4 +24,5 @@ __all__ = [
     "PasswordReset",
     "OrganizationInvitation",
     "OAuthAccount",
+    "ProviderCredential",
 ]

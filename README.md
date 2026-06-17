@@ -73,7 +73,8 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 | **M3** | Auth core (register/login/logout, JWT, `/me`) | ✅ Done |
 | **M4** | Session (refresh, switch-org, verify-email, Resend) | ✅ Done |
 | **M5–M6** | Orgs, invitations, RBAC | ✅ Done |
-| **M7–M12** | Providers, traces, agents, HITL, testing | Planned |
+| **M7** | Provider layer (OpenAI, Anthropic, Ollama — unified interface) | ✅ Done |
+| **M8–M12** | Traces, agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
 
 Full breakdown: [docs/spec/sprint-plan.md](docs/spec/sprint-plan.md)  
@@ -283,6 +284,27 @@ docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/t
 curl -X POST http://localhost:8000/organizations
 # → 401 INVALID_TOKEN (no cookie)
 ```
+
+### M7 verification (repo root)
+
+Dev stack must be running. Unified LLM provider layer (OpenAI, Anthropic, Ollama) with org-scoped, encrypted API keys. Details: [docs/spec/m7-provider-layer.md](docs/spec/m7-provider-layer.md).
+
+```bash
+# 1. M7 unit tests (Fernet encryption + provider factory/base types)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_encryption.py tests/unit/test_provider_factory.py -v
+
+# 2. Provider endpoint integration tests (set/list/delete credential, RBAC, health)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_provider_endpoints.py -v -m integration
+
+# 3. Migration 0002 (provider_credentials table) at head
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_migrations.py -v -m integration
+
+# 4. Smoke (manual)
+curl http://localhost:8000/providers
+# → 401 INVALID_TOKEN (no cookie)
+```
+
+> **Note:** Org-level keys override platform-level `.env` keys; if neither is set the provider returns `PROVIDER_NOT_CONFIGURED`. Keys are stored AES-encrypted (Fernet, derived from `APP_SECRET_KEY`) and never returned in plaintext.
 
 ### Health check
 

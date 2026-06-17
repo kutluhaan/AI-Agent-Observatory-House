@@ -53,12 +53,17 @@ def test_all_auth_tables_exist():
 
 @pytest.mark.integration
 def test_alembic_at_head():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    head = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
+
     engine = create_engine(_sync_database_url())
     with engine.connect() as conn:
         version = conn.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-    assert version == "0001"
+    assert version == head
 
 
 @pytest.mark.integration
