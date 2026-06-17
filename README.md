@@ -74,7 +74,8 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 | **M4** | Session (refresh, switch-org, verify-email, Resend) | ✅ Done |
 | **M5–M6** | Orgs, invitations, RBAC | ✅ Done |
 | **M7** | Provider layer (OpenAI, Anthropic, Ollama — unified interface) | ✅ Done |
-| **M8–M12** | Traces, agents, HITL, testing | Planned |
+| **M8** | Trace collector (Redis Stream → ClickHouse, live WebSocket) | ✅ Done |
+| **M9–M12** | Agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
 
 Full breakdown: [docs/spec/sprint-plan.md](docs/spec/sprint-plan.md)  
