@@ -32,6 +32,9 @@ def _pwd_reset_key(token_hash: str) -> str:
 def _rate_limit_key(endpoint: str, identifier: str) -> str:
     return f"ratelimit:{endpoint}:{identifier}"
 
+def _invite_key(token_hash: str) -> str:
+    return f"auth:invite:{token_hash}"
+
 
 # ─── Refresh Token Whitelist ──────────────────────────────
 
@@ -164,3 +167,25 @@ async def check_rate_limit(
         return False, max(ttl, 1)
 
     return True, 0
+
+
+# ─── Invitation Token ─────────────────────────────────────
+
+async def store_invite_token(
+    redis: aioredis.Redis,
+    token_hash: str,
+    invitation_id: str,
+) -> None:
+    """Davet token'ını Redis'e yaz. TTL: 7 gün."""
+    await redis.set(_invite_key(token_hash), invitation_id, ex=604800)
+
+
+async def get_invite_id(
+    redis: aioredis.Redis,
+    token_hash: str,
+) -> str | None:
+    return await redis.get(_invite_key(token_hash))
+
+
+async def revoke_invite_token(redis: aioredis.Redis, token_hash: str) -> None:
+    await redis.delete(_invite_key(token_hash))

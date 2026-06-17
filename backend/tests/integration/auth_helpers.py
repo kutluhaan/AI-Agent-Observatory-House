@@ -99,6 +99,38 @@ def seed_organization(owner_user_id: str, slug: str | None = None) -> tuple[str,
     return org_id, org_slug
 
 
+def add_member(org_id: str, user_id: str, role: str) -> None:
+    """Mevcut bir org'a verilen rolle üye ekler — RBAC/üye yönetimi testleri için."""
+    engine = create_engine(sync_database_url())
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO organization_members (organization_id, user_id, role)
+                VALUES (:org_id, :user_id, :role)
+                """
+            ),
+            {"org_id": org_id, "user_id": user_id, "role": role},
+        )
+
+
+def get_invitation_status(org_id: str, email: str) -> str | None:
+    """Davet statüsünü DB'den okur — cancel/accept testleri için."""
+    engine = create_engine(sync_database_url())
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT status FROM organization_invitations
+                WHERE organization_id = :org_id AND email = :email
+                ORDER BY created_at DESC LIMIT 1
+                """
+            ),
+            {"org_id": org_id, "email": email},
+        ).first()
+    return row[0] if row else None
+
+
 def seed_organization_without_membership(created_by_user_id: str) -> str:
     """Üyelik olmadan org oluşturur — switch-org NOT_A_MEMBER testleri için."""
     org_id = str(uuid.uuid4())

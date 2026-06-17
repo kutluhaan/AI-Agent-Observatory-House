@@ -85,6 +85,12 @@ app.add_exception_handler(Exception, generic_error_handler)
 from app.api.v1.auth import router as auth_router
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
+# M5: Organizations + Invitations router
+from app.api.v1.organizations import router as org_router
+from app.api.v1.invitations import router as inv_router
+app.include_router(org_router, prefix="/organizations", tags=["organizations"])
+app.include_router(inv_router, prefix="/invitations", tags=["invitations"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])

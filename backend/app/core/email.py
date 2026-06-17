@@ -63,6 +63,32 @@ async def send_verification_email(email: str, raw_token: str) -> bool:
         return False
 
 
+async def send_invitation_email(
+    email: str,
+    org_name: str,
+    invited_by: str,
+    raw_token: str,
+    role: str,
+) -> bool:
+    """Org davet emaili gönderir. Hata olsa da exception fırlatmaz (log + False)."""
+    invite_url = f"{settings.frontend_url}/invitations/{raw_token}/accept"
+
+    try:
+        await _send_resend_email({
+            "from": settings.email_from,
+            "to": email,
+            "subject": f"You've been invited to join {org_name} on AI Agent Observatory",
+            "html": _invitation_email_html(invite_url, org_name, invited_by, role),
+        })
+
+        logger.info("email.invitation_sent", email=email, org=org_name)
+        return True
+
+    except Exception as e:
+        logger.error("email.send_failed", email=email, error=str(e))
+        return False
+
+
 async def send_password_reset_email(email: str, raw_token: str) -> bool:
     """
     Şifre sıfırlama linki gönderir.
@@ -118,6 +144,45 @@ def _verification_email_html(verify_url: str) -> str:
     </p>
     <p style="color: #334155; font-size: 11px; margin-top: 8px; word-break: break-all;">
       Or copy this link: {verify_url}
+    </p>
+  </div>
+</body>
+</html>
+"""
+
+
+def _invitation_email_html(invite_url: str, org_name: str, invited_by: str, role: str) -> str:
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+             background: #0f172a; color: #e2e8f0; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 480px; margin: 0 auto;">
+    <h1 style="font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 8px;">
+      You've been invited
+    </h1>
+    <p style="color: #94a3b8; margin-bottom: 8px; line-height: 1.6;">
+      <strong style="color: #e2e8f0;">{invited_by}</strong> has invited you to join
+      <strong style="color: #e2e8f0;">{org_name}</strong> as a <strong style="color: #e2e8f0;">{role}</strong>.
+    </p>
+    <p style="color: #94a3b8; margin-bottom: 32px; line-height: 1.6;">
+      This invitation expires in 7 days.
+    </p>
+    <a href="{invite_url}"
+       style="display: inline-block; background: #6366f1; color: #fff;
+              padding: 12px 24px; border-radius: 8px; text-decoration: none;
+              font-weight: 500; font-size: 14px;">
+      Accept Invitation
+    </a>
+    <p style="color: #475569; font-size: 12px; margin-top: 32px;">
+      If you didn't expect this invitation, you can safely ignore this email.
+    </p>
+    <p style="color: #334155; font-size: 11px; margin-top: 8px; word-break: break-all;">
+      Or copy this link: {invite_url}
     </p>
   </div>
 </body>

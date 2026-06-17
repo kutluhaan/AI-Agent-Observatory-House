@@ -72,7 +72,7 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 | **M2** | Database schema + Alembic migrations | ✅ Done |
 | **M3** | Auth core (register/login/logout, JWT, `/me`) | ✅ Done |
 | **M4** | Session (refresh, switch-org, verify-email, Resend) | ✅ Done |
-| **M5–M6** | Orgs, invitations, RBAC | Planned |
+| **M5–M6** | Orgs, invitations, RBAC | ✅ Done |
 | **M7–M12** | Providers, traces, agents, HITL, testing | Planned |
 | **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
 
@@ -262,6 +262,25 @@ docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/t
 
 # 4. Smoke (manual)
 curl -X POST http://localhost:8000/auth/refresh
+# → 401 INVALID_TOKEN (no cookie)
+```
+
+### M5 + M6 verification (repo root)
+
+Dev stack must be running. Org management, invitations, and RBAC. Details: [docs/spec/m5-m6-org-rbac.md](docs/spec/m5-m6-org-rbac.md).
+
+```bash
+# 1. RBAC unit tests (require_role permission matrix, role hierarchy)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_rbac.py -v
+
+# 2. Org + invitation integration tests (create, members, RBAC, invite flow)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_org_endpoints.py -v -m integration
+
+# 3. Auth regression (M3 + M4 still green)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_auth_flow.py tests/integration/test_m4_auth_flow.py -v -m integration
+
+# 4. Smoke (manual)
+curl -X POST http://localhost:8000/organizations
 # → 401 INVALID_TOKEN (no cookie)
 ```
 
