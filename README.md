@@ -307,6 +307,24 @@ curl http://localhost:8000/providers
 
 > **Note:** Org-level keys override platform-level `.env` keys; if neither is set the provider returns `PROVIDER_NOT_CONFIGURED`. Keys are stored AES-encrypted (Fernet, derived from `APP_SECRET_KEY`) and never returned in plaintext.
 
+### M8 verification (repo root)
+
+Dev stack must be running. Trace collector: agent/LLM events → Redis Stream → ClickHouse, with a live WebSocket feed. Details: [docs/spec/m8-trace-collector.md](docs/spec/m8-trace-collector.md).
+
+```bash
+# 1. M8 unit tests (trace collector emit + WebSocket org-scoped broadcast)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_trace_collector.py -v
+
+# 2. Trace pipeline integration (test-completion → consumer → ClickHouse → GET /traces)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/integration/test_trace_flow.py -v -m integration
+
+# 3. Smoke (manual)
+curl http://localhost:8000/traces
+# → 401 INVALID_TOKEN (no cookie)
+```
+
+> **How it works:** A provider call (e.g. `POST /providers/{provider}/test-completion`) emits `agent_start → llm_call_start → llm_call_end → agent_end` events to a Redis Stream. A background consumer persists them to ClickHouse (org-scoped, 30-day TTL) and broadcasts them live to `WS /ws/traces`. Query history via `GET /traces` and `GET /traces/{trace_id}` — both org-isolated. The `test-completion` endpoint is the seam the M9 Agent Engine will reuse.
+
 ### Health check
 
 ```bash
