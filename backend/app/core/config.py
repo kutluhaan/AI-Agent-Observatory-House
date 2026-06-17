@@ -22,10 +22,14 @@ class Settings(BaseSettings):
 
     # ClickHouse
     clickhouse_host: str = "clickhouse"
-    clickhouse_port: int = 9000
+    clickhouse_port: int = 9000  # native protocol (compose CLICKHOUSE_PORT)
+    clickhouse_http_port: int = 8123  # clickhouse-connect HTTP arabirimi (M8)
     clickhouse_db: str = "observatory"
     clickhouse_user: str = "observatory"
     clickhouse_password: str = "changeme"
+
+    # Tracing (M8)
+    trace_retention_days: int = 30
 
     # JWT
     jwt_private_key: str = ""

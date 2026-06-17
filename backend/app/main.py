@@ -7,6 +7,7 @@ M3: Redis bağlantısı, auth router (register, login, logout, /me)
 M4: refresh, switch-org, verify-email, resend-verification, Resend email
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import structlog
@@ -16,14 +17,17 @@ from fastapi.exceptions import RequestValidationError
 
 from app.core.config import get_settings
 from app.core.database import Base
+from app.core import clickhouse
 from app.core.redis import close_redis, get_redis_pool
 from app.core.responses import (
-    AppError, 
-    app_error_handler, 
+    AppError,
+    app_error_handler,
     generic_error_handler,
     request_validation_error_handler,
     )
 from app.middleware import AuthMiddleware
+from app.services.trace_consumer import TraceConsumer, ensure_group
+from app.ws.traces import manager as ws_manager
 
 # M2: Tüm modelleri Base.metadata'ya kaydet
 import app.models  # noqa: F401
@@ -42,12 +46,32 @@ async def lifespan(app: FastAPI):
     logger.info("Database models loaded", table_count=table_count)
 
     # M3: Redis bağlantısı
-    await get_redis_pool()
+    redis = await get_redis_pool()
     logger.info("Redis connected")
-    
+
+    # M8: ClickHouse şeması + trace consumer (CH erişilemezse app yine de açılır)
+    consumer_task = None
+    try:
+        await clickhouse.init_schema()
+        await ensure_group(redis)
+        consumer = TraceConsumer(redis, ws_manager=ws_manager)
+        consumer_task = asyncio.create_task(consumer.run())
+        app.state.trace_consumer = consumer
+        logger.info("Trace consumer started")
+    except Exception as exc:
+        logger.error("trace_pipeline.init_failed", error=str(exc))
+
     yield
 
     # Shutdown
+    if consumer_task is not None:
+        app.state.trace_consumer.stop()
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+    clickhouse.close_clickhouse()
     await close_redis()
     logger.info("Observatory API shutdown complete")
 
@@ -94,6 +118,12 @@ app.include_router(inv_router, prefix="/invitations", tags=["invitations"])
 # M7: Providers router
 from app.api.v1.providers import router as providers_router
 app.include_router(providers_router, prefix="/providers", tags=["providers"])
+
+# M8: Traces router + WebSocket
+from app.api.v1.traces import router as traces_router
+from app.ws.traces import router as ws_router
+app.include_router(traces_router, prefix="/traces", tags=["traces"])
+app.include_router(ws_router, prefix="/ws", tags=["ws"])
 
 # ─── Health Check ─────────────────────────────────────────
 
