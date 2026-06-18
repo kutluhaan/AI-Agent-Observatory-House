@@ -61,6 +61,11 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("trace_pipeline.init_failed", error=str(exc))
 
+    # M9: Built-in tool'ları kaydet
+    from app.services.agent.tools.builtin import register_builtin_tools
+    register_builtin_tools()
+    logger.info("Agent built-in tools registered")
+
     yield
 
     # Shutdown
@@ -124,6 +129,10 @@ from app.api.v1.traces import router as traces_router
 from app.ws.traces import router as ws_router
 app.include_router(traces_router, prefix="/traces", tags=["traces"])
 app.include_router(ws_router, prefix="/ws", tags=["ws"])
+
+# M9: Agents router
+from app.api.v1.agents import router as agents_router
+app.include_router(agents_router, prefix="/agents", tags=["agents"])
 
 # ─── Health Check ─────────────────────────────────────────
 

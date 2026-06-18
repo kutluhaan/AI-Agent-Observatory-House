@@ -28,6 +28,23 @@ def _to_ollama_messages(messages: list[Message]) -> list[dict[str, Any]]:
         entry: dict[str, Any] = {"role": m.role, "content": m.content}
         if m.tool_call_id:
             entry["tool_call_id"] = m.tool_call_id
+        if m.tool_calls:
+            # Ollama uses OpenAI-compatible format for tool calls in assistant messages
+            entry["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": (
+                            json.loads(tc["arguments"])
+                            if isinstance(tc["arguments"], str)
+                            else tc["arguments"]
+                        ),
+                    },
+                }
+                for tc in m.tool_calls
+            ]
         result.append(entry)
     return result
 
@@ -133,6 +150,7 @@ class OllamaProvider(BaseLLMProvider):
             ) as response:
                 response.raise_for_status()
 
+                has_tool_calls = False
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue
@@ -143,6 +161,7 @@ class OllamaProvider(BaseLLMProvider):
                         yield StreamEvent(type="token", content=message["content"])
 
                     if "tool_calls" in message:
+                        has_tool_calls = True
                         for tc in message["tool_calls"]:
                             yield StreamEvent(
                                 type="tool_call",
@@ -154,7 +173,8 @@ class OllamaProvider(BaseLLMProvider):
                             )
 
                     if chunk.get("done"):
-                        yield StreamEvent(type="done", finish_reason="stop")
+                        finish_reason = "tool_calls" if has_tool_calls else "stop"
+                        yield StreamEvent(type="done", finish_reason=finish_reason)
 
         except httpx.HTTPStatusError as e:
             yield StreamEvent(type="error", error_message=f"Ollama request failed: {e.response.status_code}")

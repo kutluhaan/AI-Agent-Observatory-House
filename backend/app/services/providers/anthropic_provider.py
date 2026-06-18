@@ -3,6 +3,7 @@ AnthropicProvider — Anthropic Messages API üzerinden BaseLLMProvider implemen
 
 Anthropic'in farkı: system message ayrı parametre, content blocks farklı yapıda.
 """
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -38,6 +39,23 @@ def _split_system_and_messages(messages: list[Message]) -> tuple[str, list[dict[
                     "content": m.content,
                 }],
             })
+        elif m.role == "assistant" and m.tool_calls:
+            # Anthropic requires tool use blocks alongside text in assistant turns
+            content: list[dict[str, Any]] = []
+            if m.content:
+                content.append({"type": "text", "text": m.content})
+            for tc in m.tool_calls:
+                raw_args = tc["arguments"]
+                input_dict = (
+                    json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                )
+                content.append({
+                    "type": "tool_use",
+                    "id": tc["id"],
+                    "name": tc["name"],
+                    "input": input_dict,
+                })
+            chat_messages.append({"role": "assistant", "content": content})
         else:
             chat_messages.append({"role": m.role, "content": m.content})
 

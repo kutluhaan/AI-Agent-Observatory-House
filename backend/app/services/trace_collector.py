@@ -52,21 +52,29 @@ class Tracer:
         await tracer.event("llm_call_start", {"model": "gpt-4o"})
         ...
         await tracer.end(status="completed")
+
+    Multi-agent: parent_trace_id verilirse her event'e eklenir; UI bağlantıyı izleyebilir.
+    end() is idempotent — safe to call in both success and error paths.
     """
     redis: aioredis.Redis
     organization_id: str
     name: str
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     started_at: str = field(default_factory=_now_iso)
+    parent_trace_id: str | None = None
+    _ended: bool = field(default=False, init=False, repr=False)
 
     def _base(self, type_: str, payload: dict[str, Any] | None, ts: str) -> dict[str, Any]:
-        return {
+        event: dict[str, Any] = {
             "trace_id": self.trace_id,
             "organization_id": self.organization_id,
             "type": type_,
             "timestamp": ts,
             "payload": payload or {},
         }
+        if self.parent_trace_id:
+            event["parent_trace_id"] = self.parent_trace_id
+        return event
 
     async def start(self) -> None:
         await _xadd(self.redis, self._base("agent_start", {"name": self.name}, self.started_at))
@@ -75,6 +83,9 @@ class Tracer:
         await _xadd(self.redis, self._base(type_, payload, _now_iso()))
 
     async def end(self, status: str = "completed", payload: dict[str, Any] | None = None) -> None:
+        if self._ended:
+            return
+        self._ended = True
         ended = _now_iso()
         end_payload: dict[str, Any] = {
             "name": self.name,

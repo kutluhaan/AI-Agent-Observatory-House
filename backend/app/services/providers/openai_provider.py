@@ -1,6 +1,7 @@
 """
 OpenAIProvider — OpenAI Chat Completions API üzerinden BaseLLMProvider implementasyonu.
 """
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -25,7 +26,22 @@ def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
         if m.tool_call_id:
             entry["tool_call_id"] = m.tool_call_id
         if m.tool_calls:
-            entry["tool_calls"] = m.tool_calls
+            # OpenAI expects {id, type, function: {name, arguments}} — not our internal {id, name, arguments}
+            entry["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": (
+                            tc["arguments"]
+                            if isinstance(tc["arguments"], str)
+                            else json.dumps(tc["arguments"])
+                        ),
+                    },
+                }
+                for tc in m.tool_calls
+            ]
         result.append(entry)
     return result
 
@@ -128,6 +144,10 @@ class OpenAIProvider(BaseLLMProvider):
 
             stream = await self._client.chat.completions.create(**kwargs)
 
+            # OpenAI sends tool call arguments across many delta chunks indexed by `index`.
+            # Accumulate here; yield complete tool_call events when finish_reason arrives.
+            tool_calls_buf: dict[int, dict[str, Any]] = {}
+
             async for chunk in stream:
                 if not chunk.choices:
                     continue
@@ -139,16 +159,19 @@ class OpenAIProvider(BaseLLMProvider):
 
                 if delta.tool_calls:
                     for tc in delta.tool_calls:
-                        yield StreamEvent(
-                            type="tool_call",
-                            tool_call={
-                                "id": tc.id,
-                                "name": tc.function.name if tc.function else None,
-                                "arguments": tc.function.arguments if tc.function else None,
-                            },
-                        )
+                        idx = tc.index
+                        if idx not in tool_calls_buf:
+                            tool_calls_buf[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc.id:
+                            tool_calls_buf[idx]["id"] = tc.id
+                        if tc.function and tc.function.name:
+                            tool_calls_buf[idx]["name"] = tc.function.name
+                        if tc.function and tc.function.arguments:
+                            tool_calls_buf[idx]["arguments"] += tc.function.arguments
 
                 if finish_reason:
+                    for tc_data in tool_calls_buf.values():
+                        yield StreamEvent(type="tool_call", tool_call=tc_data)
                     normalized = "tool_calls" if finish_reason == "tool_calls" else (
                         "length" if finish_reason == "length" else "stop"
                     )

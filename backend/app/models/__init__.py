@@ -14,6 +14,7 @@ from app.models.auth import (
     OAuthAccount,
 )
 from app.models.provider import ProviderCredential
+from app.models.agent import Agent
 
 __all__ = [
     "User",
@@ -25,4 +26,5 @@ __all__ = [
     "OrganizationInvitation",
     "OAuthAccount",
     "ProviderCredential",
+    "Agent",
 ]
