@@ -15,6 +15,7 @@ from app.models.auth import (
 )
 from app.models.provider import ProviderCredential
 from app.models.agent import Agent
+from app.models.test_suite import TestSuite, TestCase, TestRun, TestCaseResult
 
 __all__ = [
     "User",
@@ -27,4 +28,8 @@ __all__ = [
     "OAuthAccount",
     "ProviderCredential",
     "Agent",
+    "TestSuite",
+    "TestCase",
+    "TestRun",
+    "TestCaseResult",
 ]

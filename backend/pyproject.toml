@@ -43,6 +43,9 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.0",
     "structlog>=24.4.0",
+
+    # Test suite parsing
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]

@@ -79,13 +79,17 @@ async def approve_hitl(
 ):
     """Tool çağrısını orijinal argümanlarla onaylar."""
     hitl = get_hitl_engine()
+    # Org kontrolü resolve'dan ÖNCE — resolve() runner'ı uyandırır; 403 sonradan gelemez.
+    existing = await hitl.get(request_id)
+    if existing is None:
+        raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
+    _assert_org(existing.org_id, str(ctx.org_id))
     try:
         req = await hitl.resolve(request_id, "approved")
     except HITLNotFoundError:
         raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
     except HITLAlreadyResolvedError as exc:
         raise AppError("HITL_ALREADY_RESOLVED", str(exc), 409)
-    _assert_org(req.org_id, str(ctx.org_id))
     return success(HITLRequestResponse(**req.__dict__).model_dump())
 
 
@@ -97,13 +101,16 @@ async def reject_hitl(
 ):
     """Tool çağrısını reddeder; agent HITLRejectedError alır ve durur."""
     hitl = get_hitl_engine()
+    existing = await hitl.get(request_id)
+    if existing is None:
+        raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
+    _assert_org(existing.org_id, str(ctx.org_id))
     try:
         req = await hitl.resolve(request_id, "rejected", reason=body.reason)
     except HITLNotFoundError:
         raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
     except HITLAlreadyResolvedError as exc:
         raise AppError("HITL_ALREADY_RESOLVED", str(exc), 409)
-    _assert_org(req.org_id, str(ctx.org_id))
     return success(HITLRequestResponse(**req.__dict__).model_dump())
 
 
@@ -115,6 +122,10 @@ async def modify_hitl(
 ):
     """Tool argümanlarını değiştirerek onaylar; agent modified argümanlarla devam eder."""
     hitl = get_hitl_engine()
+    existing = await hitl.get(request_id)
+    if existing is None:
+        raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
+    _assert_org(existing.org_id, str(ctx.org_id))
     try:
         req = await hitl.resolve(
             request_id,
@@ -126,5 +137,4 @@ async def modify_hitl(
         raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
     except HITLAlreadyResolvedError as exc:
         raise AppError("HITL_ALREADY_RESOLVED", str(exc), 409)
-    _assert_org(req.org_id, str(ctx.org_id))
     return success(HITLRequestResponse(**req.__dict__).model_dump())

@@ -143,6 +143,13 @@ app.include_router(agents_router, prefix="/agents", tags=["agents"])
 from app.api.v1.hitl import router as hitl_router
 app.include_router(hitl_router, prefix="/hitl", tags=["hitl"])
 
+# M11: Test Suites + Test Runs routers
+from app.api.v1.test_suites import router as test_suites_router, test_runs_router
+from app.ws.test_runs import router as test_runs_ws_router
+app.include_router(test_suites_router, prefix="/test-suites", tags=["test-suites"])
+app.include_router(test_runs_router, prefix="/test-runs", tags=["test-runs"])
+app.include_router(test_runs_ws_router, prefix="/ws", tags=["ws"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])

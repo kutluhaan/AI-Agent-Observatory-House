@@ -345,11 +345,13 @@ async def run_agent(
             },
         )
 
-    # Sync mode
+    # Sync mode — HITL beklemesi olabilecek agent'lara 10 dk ekstra (runner.run() ile senkron)
+    from app.services.hitl import HITL_TIMEOUT
+    hitl_extra = HITL_TIMEOUT if agent.hitl_tool_names else 0
     try:
         result = await asyncio.wait_for(
             runner.run(body.input),
-            timeout=agent.timeout_seconds + 5,  # endpoint-level safety margin
+            timeout=agent.timeout_seconds + hitl_extra + 5,  # endpoint-level safety margin
         )
     except asyncio.TimeoutError:
         raise AppError("AGENT_TIMEOUT", f"Agent timed out after {agent.timeout_seconds}s.", 408)
@@ -381,6 +383,7 @@ async def _sse_generator(
     """
     SSE generator — runner.stream() event'lerini text/event-stream formatına çevirir.
     """
+    from app.services.hitl import HITL_TIMEOUT
     timeout_at = asyncio.get_running_loop().time() + timeout_seconds + 5
     try:
         async for event in runner.stream(user_input):
@@ -393,6 +396,9 @@ async def _sse_generator(
                 ).to_sse()
                 return
             yield event.to_sse()
+            # Her HITL bekleme penceresi için timeout'u uzat
+            if event.type == "hitl_requested":
+                timeout_at += HITL_TIMEOUT
     except Exception as exc:
         logger.error("sse_generator.error", error=str(exc))
         yield AgentStreamEvent(

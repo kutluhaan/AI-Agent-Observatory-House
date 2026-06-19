@@ -180,6 +180,7 @@ async def _run_sub_agent(ctx: ToolContext, agent_id: str, user_input: str) -> st
         max_steps=agent_row.max_steps,
         timeout_seconds=agent_row.timeout_seconds,
         tool_names=agent_row.tool_names or [],
+        hitl_tool_names=agent_row.hitl_tool_names or [],
     )
 
     provider = await get_provider(ctx.db, ctx.org_id, config.provider)
@@ -198,11 +199,18 @@ async def _run_sub_agent(ctx: ToolContext, agent_id: str, user_input: str) -> st
         redis=ctx.redis,
     )
 
+    try:
+        from app.services.hitl import get_hitl_engine
+        hitl = get_hitl_engine()
+    except RuntimeError:
+        hitl = None
+
     runner = AgentRunner(
         config=config,
         provider=provider,
         tracer=sub_tracer,
         tool_context=sub_ctx,
+        hitl=hitl,
     )
 
     agent_result = await runner.run(user_input)
