@@ -65,6 +65,9 @@ class Agent(Base):
     # ["echo", "calculator"] gibi kayıtlı tool isimlerinin listesi
     tool_names: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
+    # HITL için insan onayı gerektiren tool isimleri (tool_names alt kümesi)
+    hitl_tool_names: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_at: Mapped[datetime] = mapped_column(

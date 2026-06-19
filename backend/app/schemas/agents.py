@@ -26,6 +26,7 @@ class CreateAgentRequest(BaseModel):
     max_steps: Annotated[int, Field(ge=1, le=_MAX_STEPS_LIMIT)] = 10
     timeout_seconds: Annotated[int, Field(ge=5, le=_TIMEOUT_MAX)] = 120
     tool_names: list[str] = Field(default_factory=list, max_length=_TOOL_NAMES_MAX)
+    hitl_tool_names: list[str] = Field(default_factory=list, max_length=_TOOL_NAMES_MAX)
 
     @field_validator("provider")
     @classmethod
@@ -44,6 +45,16 @@ class CreateAgentRequest(BaseModel):
             seen.add(name)
         return v
 
+    @field_validator("hitl_tool_names")
+    @classmethod
+    def validate_hitl_tool_names(cls, v: list[str]) -> list[str]:
+        seen: set[str] = set()
+        for name in v:
+            if name in seen:
+                raise ValueError(f"Duplicate hitl_tool_name: '{name}'")
+            seen.add(name)
+        return v
+
 
 class UpdateAgentRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=200)] | None = None
@@ -56,6 +67,7 @@ class UpdateAgentRequest(BaseModel):
     max_steps: Annotated[int, Field(ge=1, le=_MAX_STEPS_LIMIT)] | None = None
     timeout_seconds: Annotated[int, Field(ge=5, le=_TIMEOUT_MAX)] | None = None
     tool_names: list[str] | None = None
+    hitl_tool_names: list[str] | None = None
     is_active: bool | None = None
 
     @field_validator("provider")
@@ -77,6 +89,18 @@ class UpdateAgentRequest(BaseModel):
             seen.add(name)
         return v
 
+    @field_validator("hitl_tool_names")
+    @classmethod
+    def validate_hitl_tool_names(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        seen: set[str] = set()
+        for name in v:
+            if name in seen:
+                raise ValueError(f"Duplicate hitl_tool_name: '{name}'")
+            seen.add(name)
+        return v
+
 
 class AgentResponse(BaseModel):
     id: uuid.UUID
@@ -90,6 +114,7 @@ class AgentResponse(BaseModel):
     max_steps: int
     timeout_seconds: int
     tool_names: list[str]
+    hitl_tool_names: list[str]
     is_active: bool
     created_by: uuid.UUID | None
     created_at: str
@@ -109,6 +134,7 @@ class AgentResponse(BaseModel):
             max_steps=agent.max_steps,
             timeout_seconds=agent.timeout_seconds,
             tool_names=agent.tool_names or [],
+            hitl_tool_names=agent.hitl_tool_names or [],
             is_active=agent.is_active,
             created_by=agent.created_by,
             created_at=agent.created_at.isoformat(),

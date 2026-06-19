@@ -40,12 +40,16 @@ from app.services.agent.base import (
     AgentMaxStepsError,
     AgentStreamEvent,
     AgentTimeoutError,
+    HITLRejectedError,
+    HITLTimeoutError,
 )
 from app.services.agent.registry import ToolContext, ToolRegistry
 from app.services.agent.runner import AgentRunner
+from app.services.hitl import get_hitl_engine
 from app.services.providers.base import ProviderError
 from app.services.providers.factory import get_provider
 from app.services.trace_collector import Tracer
+from app.ws.traces import manager as ws_manager
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -89,6 +93,7 @@ async def _build_runner(
         max_steps=agent.max_steps,
         timeout_seconds=agent.timeout_seconds,
         tool_names=agent.tool_names or [],
+        hitl_tool_names=agent.hitl_tool_names or [],
     )
 
     # Kayıtsız tool varsa erken hata ver
@@ -121,7 +126,19 @@ async def _build_runner(
         redis=redis,
     )
 
-    return AgentRunner(config=config, provider=provider, tracer=tracer, tool_context=tool_context)
+    try:
+        hitl = get_hitl_engine()
+    except RuntimeError:
+        hitl = None  # HITL engine başlatılmamışsa (test ortamı) None
+
+    return AgentRunner(
+        config=config,
+        provider=provider,
+        tracer=tracer,
+        tool_context=tool_context,
+        hitl=hitl,
+        ws_manager=ws_manager,
+    )
 
 
 # ─── CRUD ─────────────────────────────────────────────────
@@ -153,6 +170,15 @@ async def create_agent(
                 422,
             )
 
+    # hitl_tool_names, tool_names'ın alt kümesi olmalı
+    for name in body.hitl_tool_names:
+        if name not in body.tool_names:
+            raise AppError(
+                "HITL_TOOL_NOT_IN_TOOL_NAMES",
+                f"hitl_tool_name '{name}' must also be in tool_names.",
+                422,
+            )
+
     agent = Agent(
         organization_id=ctx.org_id,
         created_by=ctx.user_id,
@@ -166,6 +192,7 @@ async def create_agent(
         max_steps=body.max_steps,
         timeout_seconds=body.timeout_seconds,
         tool_names=body.tool_names,
+        hitl_tool_names=body.hitl_tool_names,
         is_active=True,
     )
     db.add(agent)
@@ -248,6 +275,17 @@ async def update_agent(
                     422,
                 )
 
+    # hitl_tool_names, nihai tool_names'ın alt kümesi olmalı
+    if body.hitl_tool_names is not None:
+        effective_tool_names = body.tool_names if body.tool_names is not None else (agent.tool_names or [])
+        for name in body.hitl_tool_names:
+            if name not in effective_tool_names:
+                raise AppError(
+                    "HITL_TOOL_NOT_IN_TOOL_NAMES",
+                    f"hitl_tool_name '{name}' must also be in tool_names.",
+                    422,
+                )
+
     # description and max_tokens are nullable columns — allow explicit null.
     # All other Agent columns are NOT NULL; silently skip null values here so
     # a PATCH with {"name": null} doesn't crash the DB with a constraint error.
@@ -318,6 +356,8 @@ async def run_agent(
     except AgentTimeoutError as exc:
         raise AppError(exc.code, exc.message, exc.status_code)
     except AgentMaxStepsError as exc:
+        raise AppError(exc.code, exc.message, exc.status_code)
+    except (HITLRejectedError, HITLTimeoutError) as exc:
         raise AppError(exc.code, exc.message, exc.status_code)
     except AgentError as exc:
         raise AppError(exc.code, exc.message, exc.status_code)

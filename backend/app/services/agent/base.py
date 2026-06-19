@@ -27,6 +27,7 @@ class AgentConfig:
     max_steps: int
     timeout_seconds: int
     tool_names: list[str]
+    hitl_tool_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -44,14 +45,20 @@ class AgentStreamEvent:
     stream() generator'ının yield ettiği her event.
 
     Tipler:
-      token         — LLM'den gelen metin parçası
+      token           — LLM'den gelen metin parçası
       tool_call_start — tool çalışmaya başladı
       tool_call_end   — tool sonuçlandı
-      step_done     — bir adım (LLM turu) tamamlandı
-      done          — tüm çalıştırma bitti
-      error         — kurtarılamaz hata
+      hitl_requested  — insan onayı bekleniyor (tool çağrısı askıya alındı)
+      hitl_resolved   — insan kararı geldi (approved/modified/rejected)
+      step_done       — bir adım (LLM turu) tamamlandı
+      done            — tüm çalıştırma bitti
+      error           — kurtarılamaz hata
     """
-    type: Literal["token", "tool_call_start", "tool_call_end", "step_done", "done", "error"]
+    type: Literal[
+        "token", "tool_call_start", "tool_call_end",
+        "hitl_requested", "hitl_resolved",
+        "step_done", "done", "error",
+    ]
     content: str | None = None
     tool_name: str | None = None
     tool_arguments: dict[str, Any] | None = None
@@ -63,6 +70,10 @@ class AgentStreamEvent:
     total_usage: dict[str, int] | None = None
     error_code: str | None = None
     error_message: str | None = None
+    # HITL fields
+    hitl_request_id: str | None = None
+    hitl_action: str | None = None        # approved | modified | rejected
+    hitl_modified_arguments: dict[str, Any] | None = None
 
     def to_sse(self) -> str:
         """
@@ -76,6 +87,10 @@ class AgentStreamEvent:
             "step", "finish_reason", "trace_id", "steps_taken",
             "total_usage", "error_code", "error_message",
         ):
+            val = getattr(self, key)
+            if val is not None:
+                payload[key] = val
+        for key in ("hitl_request_id", "hitl_action", "hitl_modified_arguments"):
             val = getattr(self, key)
             if val is not None:
                 payload[key] = val
@@ -112,6 +127,25 @@ class AgentTimeoutError(AgentError):
 class AgentToolError(AgentError):
     code = "AGENT_TOOL_ERROR"
     status_code = 502
+
+
+class HITLRejectedError(AgentError):
+    code = "HITL_REJECTED"
+    status_code = 422
+
+    def __init__(self, tool_name: str, reason: str = ""):
+        msg = f"Human rejected tool call '{tool_name}'."
+        if reason:
+            msg += f" Reason: {reason}"
+        super().__init__(msg)
+
+
+class HITLTimeoutError(AgentError):
+    code = "HITL_TIMEOUT"
+    status_code = 408
+
+    def __init__(self, request_id: str):
+        super().__init__(f"HITL request '{request_id}' timed out — no human response within 10 minutes.")
 
 
 # ─── Abstract Base ────────────────────────────────────────

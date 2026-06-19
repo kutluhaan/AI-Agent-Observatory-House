@@ -31,14 +31,24 @@ def _split_system_and_messages(messages: list[Message]) -> tuple[str, list[dict[
         if m.role == "system":
             continue
         if m.role == "tool":
-            chat_messages.append({
-                "role": "user",
-                "content": [{
-                    "type": "tool_result",
-                    "tool_use_id": m.tool_call_id,
-                    "content": m.content,
-                }],
-            })
+            tool_result_block: dict[str, Any] = {
+                "type": "tool_result",
+                "tool_use_id": m.tool_call_id,
+                "content": m.content,
+            }
+            # Anthropic requires all tool results for one turn to be in a SINGLE
+            # user message. Merge consecutive tool messages instead of emitting
+            # separate user turns (which would violate the alternating-role rule).
+            if (
+                chat_messages
+                and chat_messages[-1]["role"] == "user"
+                and isinstance(chat_messages[-1]["content"], list)
+                and chat_messages[-1]["content"]
+                and chat_messages[-1]["content"][0].get("type") == "tool_result"
+            ):
+                chat_messages[-1]["content"].append(tool_result_block)
+            else:
+                chat_messages.append({"role": "user", "content": [tool_result_block]})
         elif m.role == "assistant" and m.tool_calls:
             # Anthropic requires tool use blocks alongside text in assistant turns
             content: list[dict[str, Any]] = []

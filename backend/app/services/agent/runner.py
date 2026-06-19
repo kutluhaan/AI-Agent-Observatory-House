@@ -29,6 +29,8 @@ from app.services.agent.base import (
     AgentTimeoutError,
     AgentToolError,
     BaseAgent,
+    HITLRejectedError,
+    HITLTimeoutError,
 )
 from app.services.agent.registry import ToolContext, ToolRegistry
 from app.services.providers.base import (
@@ -60,20 +62,27 @@ class AgentRunner(BaseAgent):
         provider: BaseLLMProvider,
         tracer: Tracer,
         tool_context: ToolContext | None = None,
+        hitl: Any | None = None,         # HITLEngine — Any ile circular import önlenir
+        ws_manager: Any | None = None,   # ConnectionManager
     ) -> None:
         super().__init__(config)
         self.provider = provider
         self.tracer = tracer
         self.tool_context = tool_context
+        self.hitl = hitl
+        self.ws_manager = ws_manager
 
     # ─── Public API ───────────────────────────────────────
 
     async def run(self, user_input: str) -> AgentResult:
         """Timeout koruması ile tam çalıştırma."""
+        # HITL beklemesi olabilecek agent'lara 10 dk ekstra süre tanı
+        from app.services.hitl import HITL_TIMEOUT
+        hitl_extra = HITL_TIMEOUT if self.config.hitl_tool_names else 0
         try:
             return await asyncio.wait_for(
                 self._execute(user_input),
-                timeout=self.config.timeout_seconds,
+                timeout=self.config.timeout_seconds + hitl_extra,
             )
         except asyncio.TimeoutError:
             await self._emit_error("AGENT_TIMEOUT", f"Timed out after {self.config.timeout_seconds}s")
@@ -81,6 +90,9 @@ class AgentRunner(BaseAgent):
             raise AgentTimeoutError(self.config.timeout_seconds)
         except ProviderError:
             raise  # already traced in _execute(); let agents.py handle code/status
+        except (HITLRejectedError, HITLTimeoutError):
+            await self.tracer.end(status="error")  # idempotent
+            raise
         except AgentError:
             await self.tracer.end(status="error")  # idempotent — safe even if _execute ended it
             raise
@@ -202,6 +214,55 @@ class AgentRunner(BaseAgent):
                             "step": step,
                         })
 
+                        # HITL gate — insan onayı gerekiyorsa askıya al
+                        if self.hitl and tool_name in self.config.hitl_tool_names:
+                            request_id = await self.hitl.create_request(
+                                trace_id=self.tracer.trace_id,
+                                org_id=str(self.config.org_id),
+                                tool_name=tool_name,
+                                tool_arguments=arguments_dict,
+                            )
+                            await self.tracer.event("hitl_requested", {
+                                "request_id": request_id,
+                                "tool_name": tool_name,
+                                "arguments": arguments_dict,
+                                "step": step,
+                            })
+                            if self.ws_manager:
+                                await self.ws_manager.broadcast(str(self.config.org_id), {
+                                    "type": "hitl_requested",
+                                    "request_id": request_id,
+                                    "trace_id": self.tracer.trace_id,
+                                    "tool_name": tool_name,
+                                    "tool_arguments": arguments_dict,
+                                })
+                            yield AgentStreamEvent(
+                                type="hitl_requested",
+                                tool_name=tool_name,
+                                tool_arguments=arguments_dict,
+                                step=step,
+                                hitl_request_id=request_id,
+                            )
+                            resolution = await self.hitl.wait_for_resolution(request_id)
+                            await self.tracer.event("hitl_resolved", {
+                                "request_id": request_id,
+                                "action": resolution.action,
+                                "modified_arguments": resolution.modified_arguments,
+                                "step": step,
+                            })
+                            yield AgentStreamEvent(
+                                type="hitl_resolved",
+                                tool_name=tool_name,
+                                step=step,
+                                hitl_request_id=request_id,
+                                hitl_action=resolution.action,
+                                hitl_modified_arguments=resolution.modified_arguments,
+                            )
+                            if resolution.action == "rejected":
+                                raise HITLRejectedError(tool_name, resolution.reason or "")
+                            if resolution.action == "modified" and resolution.modified_arguments:
+                                arguments_dict = resolution.modified_arguments
+
                         tool_result = await self._execute_tool(tool_name, arguments_dict)
 
                         await self.tracer.event("tool_call_end", {
@@ -246,6 +307,9 @@ class AgentRunner(BaseAgent):
         except ProviderError as exc:
             await self._emit_error(exc.code, exc.message)
             await self.tracer.end(status="error")
+            yield AgentStreamEvent(type="error", error_code=exc.code, error_message=exc.message)
+        except (HITLRejectedError, HITLTimeoutError) as exc:
+            await self.tracer.end(status="error")  # idempotent
             yield AgentStreamEvent(type="error", error_code=exc.code, error_message=exc.message)
         except AgentError as exc:
             await self.tracer.end(status="error")  # idempotent — safe if already ended
@@ -343,6 +407,11 @@ class AgentRunner(BaseAgent):
                         "arguments": arguments,
                         "step": step,
                     })
+
+                    # HITL gate — insan onayı gerekiyorsa askıya al
+                    if self.hitl and tool_name in self.config.hitl_tool_names:
+                        arguments = await self._hitl_gate(tool_name, arguments, step)
+
                     tool_result = await self._execute_tool(tool_name, arguments)
                     await self.tracer.event("tool_call_end", {
                         "name": tool_name,
@@ -369,6 +438,55 @@ class AgentRunner(BaseAgent):
         # Max steps aşıldı
         await self.tracer.end(status="max_steps_exceeded")
         raise AgentMaxStepsError(self.config.max_steps)
+
+    async def _hitl_gate(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        step: int,
+    ) -> dict[str, Any]:
+        """
+        Sync path (run/_execute) için HITL gate.
+        SSE event yoktur — sadece tracer + WebSocket bildirimi.
+        HITLRejectedError veya HITLTimeoutError fırlatabilir.
+        """
+        request_id = await self.hitl.create_request(
+            trace_id=self.tracer.trace_id,
+            org_id=str(self.config.org_id),
+            tool_name=tool_name,
+            tool_arguments=arguments,
+        )
+        await self.tracer.event("hitl_requested", {
+            "request_id": request_id,
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "step": step,
+        })
+        if self.ws_manager:
+            await self.ws_manager.broadcast(str(self.config.org_id), {
+                "type": "hitl_requested",
+                "request_id": request_id,
+                "trace_id": self.tracer.trace_id,
+                "tool_name": tool_name,
+                "tool_arguments": arguments,
+            })
+
+        resolution = await self.hitl.wait_for_resolution(request_id)
+
+        await self.tracer.event("hitl_resolved", {
+            "request_id": request_id,
+            "action": resolution.action,
+            "modified_arguments": resolution.modified_arguments,
+            "step": step,
+        })
+
+        if resolution.action == "rejected":
+            raise HITLRejectedError(tool_name, resolution.reason or "")
+
+        if resolution.action == "modified" and resolution.modified_arguments:
+            return resolution.modified_arguments
+
+        return arguments
 
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any] | str) -> str:
         """Tool handler'ı çalıştırır, hataları AgentToolError'a çevirir.

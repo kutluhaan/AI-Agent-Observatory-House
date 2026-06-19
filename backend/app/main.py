@@ -26,6 +26,7 @@ from app.core.responses import (
     request_validation_error_handler,
     )
 from app.middleware import AuthMiddleware
+from app.services.hitl import init_hitl_engine
 from app.services.trace_consumer import TraceConsumer, ensure_group
 from app.ws.traces import manager as ws_manager
 
@@ -65,6 +66,10 @@ async def lifespan(app: FastAPI):
     from app.services.agent.tools.builtin import register_builtin_tools
     register_builtin_tools()
     logger.info("Agent built-in tools registered")
+
+    # M10: HITL Engine başlat
+    init_hitl_engine(redis)
+    logger.info("HITL engine initialized")
 
     yield
 
@@ -133,6 +138,10 @@ app.include_router(ws_router, prefix="/ws", tags=["ws"])
 # M9: Agents router
 from app.api.v1.agents import router as agents_router
 app.include_router(agents_router, prefix="/agents", tags=["agents"])
+
+# M10: HITL router
+from app.api.v1.hitl import router as hitl_router
+app.include_router(hitl_router, prefix="/hitl", tags=["hitl"])
 
 # ─── Health Check ─────────────────────────────────────────
 
