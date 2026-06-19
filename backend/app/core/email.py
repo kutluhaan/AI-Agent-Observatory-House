@@ -47,6 +47,11 @@ async def send_verification_email(email: str, raw_token: str) -> bool:
     """
     verify_url = f"{settings.frontend_url}/verify-email?token={raw_token}"
 
+    # Dev kolaylığı: Resend test modu (sadece hesap sahibine gönderir) email'i
+    # bloklasa bile linki log'dan alabilmek için yaz. Prod'da yazılmaz.
+    if settings.is_development:
+        logger.info("email.dev_link", kind="verify", to=email, url=verify_url)
+
     try:
         await _send_resend_email({
             "from": settings.email_from,
@@ -73,6 +78,9 @@ async def send_invitation_email(
     """Org davet emaili gönderir. Hata olsa da exception fırlatmaz (log + False)."""
     invite_url = f"{settings.frontend_url}/invitations/{raw_token}/accept"
 
+    if settings.is_development:
+        logger.info("email.dev_link", kind="invite", to=email, url=invite_url)
+
     try:
         await _send_resend_email({
             "from": settings.email_from,
@@ -96,6 +104,9 @@ async def send_password_reset_email(email: str, raw_token: str) -> bool:
     ama altyapı hazır, M4 sonrası eklenebilir.
     """
     reset_url = f"{settings.frontend_url}/reset-password?token={raw_token}"
+
+    if settings.is_development:
+        logger.info("email.dev_link", kind="reset", to=email, url=reset_url)
 
     try:
         await _send_resend_email({
