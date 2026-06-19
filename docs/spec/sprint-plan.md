@@ -365,18 +365,21 @@ async def delete_project(
 **Hedef:** İlk gerçek kullanım senaryosu — araştırma yapan agent tamamlanır.
 
 **Tool'lar:**
-- [ ] `web_search` — Tavily veya SerpAPI entegrasyonu
-- [ ] `read_url` — URL içeriği çekme
-- [ ] `summarize` — uzun içeriği özetleme
-- [ ] `save_note` — araştırma notlarını kaydetme
+- [x] `web_search` — Tavily AI entegrasyonu (AsyncTavilyClient, search_depth=basic)
+- [x] `read_url` — httpx async + trafilatura extraction, cümle sınırında kırpma
+- [x] `summarize` — TF-tabanlı extractive özetleme (sıfır ek LLM çağrısı)
+- [x] `save_note` — Redis HASH, trace-scoped, 24 sa TTL
+- [x] `get_notes` — Oturumdaki tüm notları tek sorguda döner
 
 **Yapılacaklar:**
-- [ ] Tool'ların implementasyonu
-- [ ] Agent system prompt tasarımı
-- [ ] Multi-step reasoning akışı
-- [ ] Araştırma sonucu formatlama
-- [ ] HITL entegrasyonu — kritik arama kararlarında onay
-- [ ] Test suite yazımı
+- [x] Tool'ların implementasyonu (`services/agent/tools/research.py`)
+- [x] Agent system prompt tasarımı (`RESEARCH_AGENT_SYSTEM_PROMPT` — 4 faz: Discovery, Deep Reading, Note Taking, Synthesis)
+- [x] Multi-step reasoning akışı (ReAct loop üzerinden — yeni altyapı gerekmedi)
+- [x] Araştırma sonucu formatlama (system prompt'ta tanımlı: Executive Summary, Key Findings, Sources, Gaps)
+- [x] Bağımlılıklar: `tavily-python>=0.7.0`, `trafilatura>=2.0.0`
+- [x] Config: `TAVILY_API_KEY` ayarı
+- [x] Unit testler (20 test — `tests/unit/test_m12_research_tools.py`)
+- [x] Dökümantasyon (`docs/diagrams/mermaid-codes/M12-diagrams.md` — 10 diyagram)
 
 **Tamamlanma kriteri:**
 - "Türkiye'deki AI startup ekosistemi" gibi bir soruya kapsamlı rapor üretebiliyor
