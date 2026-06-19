@@ -13,8 +13,8 @@ class SetProviderCredentialRequest(BaseModel):
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:
-        if v not in ("openai", "anthropic", "ollama"):
-            raise ValueError("Provider must be 'openai', 'anthropic', or 'ollama'.")
+        if v not in ("openai", "anthropic", "gemini", "ollama"):
+            raise ValueError("Provider must be 'openai', 'anthropic', 'gemini', or 'ollama'.")
         return v
 
 

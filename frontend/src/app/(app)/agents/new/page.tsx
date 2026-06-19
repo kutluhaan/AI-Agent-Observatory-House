@@ -12,7 +12,14 @@ import { Select } from "@/components/ui/select";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-const PROVIDERS = ["openai", "anthropic", "ollama"];
+const PROVIDERS = ["openai", "anthropic", "gemini", "ollama"];
+
+const DEFAULT_MODELS: Record<string, string> = {
+  openai: "gpt-4o",
+  anthropic: "claude-sonnet-4-5",
+  gemini: "gemini-2.5-flash",
+  ollama: "llama3.1",
+};
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -117,7 +124,10 @@ export default function NewAgentPage() {
           <Select
             label="Provider"
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              setModel(DEFAULT_MODELS[e.target.value] ?? "");
+            }}
           >
             {PROVIDERS.map((p) => (
               <option key={p} value={p}>

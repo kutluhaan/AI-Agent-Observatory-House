@@ -20,6 +20,7 @@ from app.services.providers.base import (
     ToolDefinition,
 )
 from app.services.providers.factory import SUPPORTED_PROVIDERS, get_provider
+from app.services.providers.gemini_provider import GeminiProvider
 from app.services.providers.ollama_provider import OllamaProvider
 from app.services.providers.openai_provider import OpenAIProvider
 
@@ -91,6 +92,12 @@ def test_openai_provider_name():
 def test_anthropic_provider_name():
     p = AnthropicProvider(api_key="sk-ant-test")
     assert p.name == "anthropic"
+    assert p.supports_tools is True
+
+
+def test_gemini_provider_name():
+    p = GeminiProvider(api_key="gm-test")
+    assert p.name == "gemini"
     assert p.supports_tools is True
 
 
@@ -197,4 +204,18 @@ async def test_factory_ollama_raises_when_no_base_url(monkeypatch):
 
 
 def test_supported_providers_set():
-    assert SUPPORTED_PROVIDERS == {"openai", "anthropic", "ollama"}
+    assert SUPPORTED_PROVIDERS == {"openai", "anthropic", "gemini", "ollama"}
+
+
+@pytest.mark.asyncio
+async def test_factory_falls_back_to_platform_gemini_key(monkeypatch):
+    """Org credential yoksa .env'deki gemini key kullanılmalı."""
+    monkeypatch.setattr("app.services.providers.factory.settings.gemini_api_key", "gm-platform-key")
+
+    db = AsyncMock()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=result_mock)
+
+    provider = await get_provider(db, uuid.uuid4(), "gemini")
+    assert isinstance(provider, GeminiProvider)

@@ -148,7 +148,7 @@ async def test_list_credentials_shows_unconfigured_providers(client):
     resp = await client.get("/providers")
     assert resp.status_code == 200
     providers = assert_success(resp.json())
-    assert len(providers) == 3  # openai, anthropic, ollama
+    assert len(providers) == 4  # openai, anthropic, gemini, ollama
     assert all(p["is_configured"] is False for p in providers)
 
 

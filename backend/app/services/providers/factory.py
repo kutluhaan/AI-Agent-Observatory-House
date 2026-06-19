@@ -19,12 +19,13 @@ from app.core.responses import AppError
 from app.models.provider import ProviderCredential
 from app.services.providers.anthropic_provider import AnthropicProvider
 from app.services.providers.base import BaseLLMProvider
+from app.services.providers.gemini_provider import GeminiProvider
 from app.services.providers.ollama_provider import OllamaProvider
 from app.services.providers.openai_provider import OpenAIProvider
 
 settings = get_settings()
 
-SUPPORTED_PROVIDERS = {"openai", "anthropic", "ollama"}
+SUPPORTED_PROVIDERS = {"openai", "anthropic", "gemini", "ollama"}
 
 
 async def get_provider(
@@ -66,14 +67,17 @@ async def get_provider(
             )
         return OllamaProvider(base_url=base_url)
 
-    # openai / anthropic — API key gerekli
+    # openai / anthropic / gemini — API key gerekli
+    _platform_keys = {
+        "openai": settings.openai_api_key,
+        "anthropic": settings.anthropic_api_key,
+        "gemini": settings.gemini_api_key,
+    }
     api_key: str | None = None
     if credential and credential.encrypted_key:
         api_key = decrypt_value(credential.encrypted_key)
     else:
-        api_key = (
-            settings.openai_api_key if provider_name == "openai" else settings.anthropic_api_key
-        )
+        api_key = _platform_keys.get(provider_name)
 
     if not api_key:
         raise AppError(
@@ -84,4 +88,6 @@ async def get_provider(
 
     if provider_name == "openai":
         return OpenAIProvider(api_key=api_key)
+    if provider_name == "gemini":
+        return GeminiProvider(api_key=api_key)
     return AnthropicProvider(api_key=api_key)
