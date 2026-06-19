@@ -49,7 +49,10 @@ export default function CreateOrgPage() {
     setLoading(true);
 
     try {
-      await api.post("/organizations", { name, slug });
+      // Oluşturma yeni org'u aktif token context'ine yazmaz; switch-org cookie'yi yeniler.
+      // Aksi halde /auth/me org_id=null kalır ve dashboard create-org'a geri sektirir.
+      const org = await api.post<{ id: string }>("/organizations", { name, slug });
+      await api.post("/auth/switch-org", { org_id: org.id });
       await refresh();
       router.replace("/");
     } catch (err) {

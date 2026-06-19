@@ -69,7 +69,10 @@ class OllamaProvider(BaseLLMProvider):
 
     def __init__(self, base_url: str):
         self._base_url = base_url.rstrip("/")
-        self._client = httpx.AsyncClient(timeout=120.0)
+        self._timeout = 120.0
+        # Not: kalıcı bir AsyncClient TUTULMAZ — factory her çağrıda yeni provider
+        # üretir ve nesne hiç kapatılmadığı için socket sızardı. Her metot kendi
+        # client'ını `async with` ile açıp kapatır.
 
     async def complete(
         self,
@@ -91,12 +94,10 @@ class OllamaProvider(BaseLLMProvider):
             if tools:
                 payload["tools"] = _to_ollama_tools(tools)
 
-            response = await self._client.post(
-                f"{self._base_url}/api/chat",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.post(f"{self._base_url}/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
 
             message = data.get("message", {})
             tool_calls = []
@@ -145,7 +146,7 @@ class OllamaProvider(BaseLLMProvider):
             if tools:
                 payload["tools"] = _to_ollama_tools(tools)
 
-            async with self._client.stream(
+            async with httpx.AsyncClient(timeout=self._timeout) as client, client.stream(
                 "POST", f"{self._base_url}/api/chat", json=payload
             ) as response:
                 response.raise_for_status()
@@ -183,7 +184,8 @@ class OllamaProvider(BaseLLMProvider):
 
     async def health_check(self) -> bool:
         try:
-            response = await self._client.get(f"{self._base_url}/api/tags", timeout=5.0)
-            return response.status_code == 200
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self._base_url}/api/tags")
+                return response.status_code == 200
         except Exception:
             return False

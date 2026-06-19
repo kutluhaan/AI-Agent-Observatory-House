@@ -75,8 +75,15 @@ At a high level: people use the **web app**, the **API** enforces tenant and aut
 | **M5–M6** | Orgs, invitations, RBAC | ✅ Done |
 | **M7** | Provider layer (OpenAI, Anthropic, Ollama — unified interface) | ✅ Done |
 | **M8** | Trace collector (Redis Stream → ClickHouse, live WebSocket) | ✅ Done |
-| **M9–M12** | Agents, HITL, testing | Planned |
-| **M13–M15** | Product UI (auth, chat/trace, test runner) | Planned |
+| **M9** | Agent engine (ReAct loop, tool registry, SSE streaming) | ✅ Done |
+| **M10** | HITL engine (approve / reject / modify, 10-min timeout) | ✅ Done |
+| **M11** | Test core (YAML suites, assertions, RAG eval, experiments) | ✅ Done |
+| **M12** | Personal research agent (web search, read, summarize, notes) | ✅ Done |
+| **M13** | Next.js UI — auth (login/register/verify, org switcher, invites) | ✅ Done |
+| **M14** | Next.js UI — agent chat (SSE streaming, tool calls, HITL modal) + trace explorer | ✅ Done |
+| **M15** | Next.js UI — test runner (YAML suites, live run progress, results) | ✅ Done |
+
+**All 15 milestones complete.** 🎉
 
 Full breakdown: [docs/spec/sprint-plan.md](docs/spec/sprint-plan.md)  
 Auth & tenancy design: [docs/spec/auth-spec.md](docs/spec/auth-spec.md)  
@@ -324,6 +331,29 @@ curl http://localhost:8000/traces
 ```
 
 > **How it works:** A provider call (e.g. `POST /providers/{provider}/test-completion`) emits `agent_start → llm_call_start → llm_call_end → agent_end` events to a Redis Stream. A background consumer persists them to ClickHouse (org-scoped, 30-day TTL) and broadcasts them live to `WS /ws/traces`. Query history via `GET /traces` and `GET /traces/{trace_id}` — both org-isolated. The `test-completion` endpoint is the seam the M9 Agent Engine will reuse.
+
+### M9–M12 verification (repo root)
+
+Dev stack must be running. Agent engine, HITL, test core, and the research agent. Specs: [m9](docs/spec/m9-agent-engine.md), [m10](docs/spec/m10-hitl-engine.md), [m11](docs/spec/m11-test-core.md), [m12](docs/spec/m12-research-agent.md).
+
+```bash
+# M9 — Agent engine (ReAct loop, tools, SSE) — unit + integration
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_agent_engine.py tests/integration/test_agent_execution.py -v -m integration
+
+# M10 — HITL (approve/reject/modify, timeout)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_hitl.py tests/integration/test_hitl_flow.py -v -m integration
+
+# M11 — Test core (YAML parse, assertions, runner)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_m11_test_core.py tests/integration/test_test_runner.py -v -m integration
+
+# M12 — Research tools (web_search, read_url, summarize, notes)
+docker compose -f docker-compose.dev.yml exec backend pytest tests/unit/test_m12_research_tools.py -v
+
+# Full suite (everything, all milestones)
+docker compose -f docker-compose.dev.yml exec backend pytest -q
+```
+
+> **Notes:** Agents run via `POST /agents/{id}/run` — SSE token stream by default; pass body `{"stream": false}` for a single JSON response. Critical tools can pause for human approval — the agent emits `hitl_requested`, then `POST /hitl/{id}/approve|reject|modify` resumes it. Test suites are defined in YAML, run in parallel/sequential, and results are stored for comparison. The research agent (M12) needs `TAVILY_API_KEY` for live web search; everything else works with mocked providers in tests.
 
 ### Health check
 

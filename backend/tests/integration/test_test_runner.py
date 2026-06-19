@@ -61,13 +61,22 @@ async def owner_client(client: AsyncClient):
 
 
 @pytest.fixture
-async def other_client(client: AsyncClient):
-    email = f"ts-other-{uuid.uuid4().hex[:8]}@example.com"
-    user_id = await register_and_verify(client, email=email, password="Test1234!", full_name="Other")
-    org_id, _ = seed_organization(user_id)
-    await login_user(client, email=email, password="Test1234!")
-    await client.post("/auth/switch-org", json={"org_id": org_id})
-    return client, org_id, user_id
+async def other_client():
+    """Bağımsız client (ayrı cookie jar) — owner_client ile aynı `client` fixture'ını
+    paylaşmamalı, yoksa ikisi tek org'a çözülür ve izolasyon testi anlamsızlaşır."""
+    from httpx import ASGITransport
+    from app.core.redis import get_redis_pool
+    from app.main import app
+
+    await get_redis_pool()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        email = f"ts-other-{uuid.uuid4().hex[:8]}@example.com"
+        user_id = await register_and_verify(ac, email=email, password="Test1234!", full_name="Other")
+        org_id, _ = seed_organization(user_id)
+        await login_user(ac, email=email, password="Test1234!")
+        await ac.post("/auth/switch-org", json={"org_id": org_id})
+        yield ac, org_id, user_id
 
 
 async def _create_suite(client, name=None, yaml=VALID_YAML):

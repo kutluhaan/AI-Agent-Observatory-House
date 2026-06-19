@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Activity, Zap, TestTube2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 
@@ -9,23 +10,23 @@ const QUICK_LINKS = [
   {
     icon: Zap,
     label: "Agents",
-    description: "Manage and run AI agents",
+    description: "Build and run AI agents",
     href: "/agents",
-    tag: "M14",
+    enabled: true,
   },
   {
     icon: Activity,
     label: "Traces",
     description: "Observe agent execution",
     href: "/traces",
-    tag: "M14",
+    enabled: true,
   },
   {
     icon: TestTube2,
     label: "Test Suites",
     description: "Automated agent testing",
     href: "/test-suites",
-    tag: "M14",
+    enabled: true,
   },
 ];
 
@@ -55,21 +56,34 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {QUICK_LINKS.map(({ icon: Icon, label, description, tag }) => (
-          <div
-            key={label}
-            className="group relative flex flex-col gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 opacity-60"
-          >
-            <Icon size={18} className="text-indigo-400" />
-            <div>
-              <p className="text-sm font-medium text-zinc-200">{label}</p>
-              <p className="text-xs text-zinc-500">{description}</p>
+        {QUICK_LINKS.map(({ icon: Icon, label, description, href, enabled }) => {
+          const card = (
+            <div
+              className={
+                "group relative flex h-full flex-col gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 transition-colors " +
+                (enabled ? "hover:border-zinc-700 hover:bg-zinc-900/70" : "opacity-50")
+              }
+            >
+              <Icon size={18} className="text-indigo-400" />
+              <div>
+                <p className="text-sm font-medium text-zinc-200">{label}</p>
+                <p className="text-xs text-zinc-500">{description}</p>
+              </div>
+              {!enabled && (
+                <span className="absolute right-3 top-3 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
+                  soon
+                </span>
+              )}
             </div>
-            <span className="absolute right-3 top-3 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
-              {tag}
-            </span>
-          </div>
-        ))}
+          );
+          return enabled ? (
+            <Link key={label} href={href}>
+              {card}
+            </Link>
+          ) : (
+            <div key={label}>{card}</div>
+          );
+        })}
       </div>
 
       <div className="mt-8 rounded-xl border border-zinc-800/50 bg-zinc-900/20 p-5">

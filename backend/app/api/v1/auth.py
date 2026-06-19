@@ -563,12 +563,24 @@ async def get_me(
 
     active_orgs = await get_active_orgs(db, user.user_id)
 
+    # Aktif org context'i — token'dan gelir (org_id/org_slug/role); org_name DB'den.
+    active_org_name = None
+    if user.org_id:
+        for m in active_orgs:
+            if m.organization_id == user.org_id:
+                active_org_name = m.organization.name
+                break
+
     return success({
         "id": str(db_user.id),
         "email": db_user.email,
         "full_name": db_user.full_name,
         "is_verified": db_user.is_verified,
         "avatar_url": db_user.avatar_url,
+        "org_id": str(user.org_id) if user.org_id else None,
+        "org_name": active_org_name,
+        "org_slug": user.org_slug,
+        "role": user.role,
         "organizations": [
             {
                 "id": str(m.organization.id),

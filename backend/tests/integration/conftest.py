@@ -19,6 +19,29 @@ async def client():
 
 
 @pytest.fixture(scope="session", autouse=True)
+async def _app_startup_state():
+    """
+    ASGITransport lifespan'i tetiklemediğinden, app startup'ında yapılan idempotent
+    kayıtları test süreci için elle yap: tool registry (M9/M12) + HITL engine (M10).
+    Trace consumer kasıtlı başlatılmaz — testler kendi drain/poll mantığını kullanır.
+    """
+    from app.core import clickhouse
+    from app.services.agent.tools.builtin import register_builtin_tools
+    from app.services.agent.tools.research import register_research_tools
+    from app.services.hitl import init_hitl_engine
+
+    register_builtin_tools()
+    register_research_tools()
+    redis = await get_redis_pool()
+    init_hitl_engine(redis)
+    try:
+        await clickhouse.init_schema()
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
 async def integration_session_cleanup():
     """Tüm integration testleri bitince pool'ları kapat."""
     yield

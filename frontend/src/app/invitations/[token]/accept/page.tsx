@@ -49,7 +49,11 @@ export default function AcceptInvitationPage() {
   async function handleAccept() {
     setState("accepting");
     try {
-      await api.post(`/invitations/${token}/accept`);
+      const res = await api.post<{ organization: { id: string } }>(
+        `/invitations/${token}/accept`,
+      );
+      // Yeni org'u aktif yap — aksi halde redirect eski/boş org context'ine düşer.
+      await api.post("/auth/switch-org", { org_id: res.organization.id });
       await refresh();
       setState("done");
       setTimeout(() => router.replace("/"), 1500);

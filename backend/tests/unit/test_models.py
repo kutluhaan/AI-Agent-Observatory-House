@@ -68,7 +68,8 @@ def test_oauth_account_table_name():
 def test_all_tables_registered():
     """Tüm tabloların Base.metadata'da kayıtlı olduğunu doğrular.
 
-    M2: 8 auth tablosu. M7: provider_credentials eklendi (9 toplam).
+    M2: 8 auth tablosu. M7: provider_credentials. M9: agents.
+    M11: test_suites, test_cases, test_runs, test_case_results.
     """
     expected_tables = {
         "users",
@@ -80,6 +81,11 @@ def test_all_tables_registered():
         "organization_invitations",
         "oauth_accounts",
         "provider_credentials",
+        "agents",
+        "test_suites",
+        "test_cases",
+        "test_runs",
+        "test_case_results",
     }
     registered = set(Base.metadata.tables.keys())
     assert expected_tables == registered, f"Eksik tablolar: {expected_tables - registered}"

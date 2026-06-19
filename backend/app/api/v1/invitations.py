@@ -29,6 +29,49 @@ from app.services.token_store import get_invite_id, revoke_invite_token
 router = APIRouter()
 
 
+@router.get("/{token}")
+async def get_invitation_preview(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Davet önizlemesi — auth gerektirmez (token zaten gizli anahtar).
+    Kabul akışından ÖNCE kullanıcıya org/rol/davet eden bilgisini gösterir.
+    Token'ı tüketmez.
+    """
+    token_hash = jwt_service.hash_token(token)
+
+    result = await db.execute(
+        select(OrganizationInvitation)
+        .where(OrganizationInvitation.token_hash == token_hash)
+        .options(selectinload(OrganizationInvitation.organization))
+    )
+    invitation = result.scalar_one_or_none()
+
+    if not invitation or invitation.status != "pending":
+        raise AppError("INVITATION_EXPIRED", "Invitation has expired or is invalid.", 410)
+
+    expires_at = (
+        invitation.expires_at.replace(tzinfo=UTC)
+        if invitation.expires_at.tzinfo is None
+        else invitation.expires_at
+    )
+    if expires_at < datetime.now(UTC):
+        raise AppError("INVITATION_EXPIRED", "This invitation has expired.", 410)
+
+    inviter_result = await db.execute(select(User).where(User.id == invitation.invited_by))
+    inviter = inviter_result.scalar_one_or_none()
+    inviter_name = (inviter.full_name or inviter.email) if inviter else "A teammate"
+
+    return success({
+        "org_name": invitation.organization.name,
+        "org_slug": invitation.organization.slug,
+        "invited_by": inviter_name,
+        "role": invitation.role,
+        "email": invitation.email,
+    })
+
+
 @router.post("/{token}/accept")
 async def accept_invitation(
     token: str,

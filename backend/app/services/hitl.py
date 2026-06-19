@@ -109,10 +109,10 @@ class HITLEngine:
             "reason": None,
             "modified_arguments": None,
         }
-        await self.redis.setex(
+        await self.redis.set(
             f"{_KEY_PREFIX}{request_id}",
-            HITL_TIMEOUT,
             json.dumps(data),
+            ex=HITL_TIMEOUT,
         )
 
         event: asyncio.Event = asyncio.Event()
@@ -178,7 +178,7 @@ class HITLEngine:
         data["reason"] = reason
         data["modified_arguments"] = modified_arguments
 
-        await self.redis.setex(key, _KEY_TTL_AFTER_RESOLVE, json.dumps(data))
+        await self.redis.set(key, json.dumps(data), ex=_KEY_TTL_AFTER_RESOLVE)
 
         resolution = HITLResolution(
             action=action,

@@ -18,13 +18,13 @@ export default function SelectOrgPage() {
   const [switching, setSwitching] = useState<string | null>(null);
   const [error, setError] = useState("");
 
+  // Org listesi /auth/me'den gelir (user.organizations) — ayrı bir liste endpoint'i yok.
   useEffect(() => {
-    api
-      .get<Organization[]>("/organizations")
-      .then(setOrgs)
-      .catch(() => setError("Failed to load workspaces."))
-      .finally(() => setLoading(false));
-  }, []);
+    if (user) {
+      setOrgs(user.organizations);
+      setLoading(false);
+    }
+  }, [user]);
 
   async function handleSelect(orgId: string) {
     if (switching) return;
