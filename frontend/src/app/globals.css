@@ -3,11 +3,56 @@
 @tailwind utilities;
 
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
+  /* ── Surfaces ─────────────────────────────── */
+  --background:      #09090b;   /* zinc-950 — page bg */
+  --surface:         #111113;   /* slightly elevated bg */
+  --surface-raised:  #18181b;   /* card / input bg */
+
+  /* ── Text ─────────────────────────────────── */
+  --foreground:         #fafafa;  /* zinc-50 */
+  --muted:              #71717a;  /* zinc-500 */
+  --muted-foreground:   #a1a1aa;  /* zinc-400 */
+
+  /* ── Border ───────────────────────────────── */
+  --border:      #27272a;   /* zinc-800 */
+  --border-subtle: rgba(255,255,255,0.06);
+
+  /* ── Accent (indigo) ──────────────────────── */
+  --accent:           #6366f1;   /* indigo-500 */
+  --accent-hover:     #4f46e5;   /* indigo-600 */
+  --accent-subtle:    rgba(99,102,241,0.12);
+  --accent-foreground: #fff;
+
+  /* ── Semantic ─────────────────────────────── */
+  --error:        #ef4444;   /* red-500 */
+  --error-subtle: rgba(239,68,68,0.10);
+  --success:      #22c55e;   /* green-500 */
+  --success-subtle: rgba(34,197,94,0.10);
+  --warning:      #f59e0b;
 }
 
+/* ── Base resets ────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
 body {
-  color: var(--foreground);
   background: var(--background);
+  color: var(--foreground);
+  min-height: 100dvh;
 }
+
+/* ── Focus ring ─────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar (minimal) ────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+/* ── Selection ──────────────────────────────── */
+::selection { background: var(--accent-subtle); color: var(--foreground); }

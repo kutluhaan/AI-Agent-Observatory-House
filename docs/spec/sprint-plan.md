@@ -392,17 +392,26 @@ async def delete_project(
 
 **Hedef:** Login, register, org yönetimi UI'ı çalışır.
 
+**Design kararları:**
+- Dark-first (`#09090b` zemin), indigo accent (`#6366f1`), Inter + JetBrains Mono
+- Minimal — kart yok, gölge yok; form elemanları doğrudan koyu zemin üzerinde yüzer
+- Custom UI bileşenleri (shadcn kurulmadı): Button (4 variant), Input (label+error+hint), Alert (3 variant), Logo (SVG)
+- Tailwind CSS variables design token sistemi
+
 **Yapılacaklar:**
-- [ ] Layout ve temel UI bileşenleri (Tailwind + shadcn/ui)
-- [ ] Login sayfası
-- [ ] Register sayfası
-- [ ] Email doğrulama sayfası
-- [ ] Org oluşturma sayfası
-- [ ] Org seçici (birden fazla org varsa)
-- [ ] Davet kabul sayfası
-- [ ] Auth context — token yönetimi, otomatik refresh
-- [ ] Protected route wrapper
-- [ ] API client (fetch wrapper, hata yönetimi)
+- [x] Layout ve temel UI bileşenleri (custom Tailwind, `clsx` + `tailwind-merge` + `lucide-react`)
+- [x] Login sayfası (`/login` — Suspense + `useSearchParams`)
+- [x] Register sayfası (`/register`)
+- [x] Email doğrulama sayfası (`/verify-email` — 4 state: pending / verifying / success / error)
+- [x] Org oluşturma sayfası (`/create-org` — gerçek zamanlı slug preview)
+- [x] Org seçici (`/select-org` — `GET /organizations` listesi, aktif org işaretli)
+- [x] Davet kabul sayfası (`/invitations/[token]/accept` — auth yoksa sign-in/register seçeneği)
+- [x] Auth context — `AuthProvider`, `useAuth()`, otomatik refresh (`lib/api.ts`)
+- [x] Protected route wrapper (`middleware.ts` — `access_token` cookie kontrolü, `?next=` redirect)
+- [x] API client (`lib/api.ts` — 401→refresh→retry, `ApiError`, tüm HTTP metodları)
+- [x] Dashboard (`/dashboard` — first-name greeting, M14 placeholders)
+- [x] App shell layout — sticky TopBar (logo + org badge + email + logout)
+- [x] `next build` — 9 route, 0 hata, 0 TypeScript hatası
 
 **Tamamlanma kriteri:**
 - Kullanıcı kayıt olup giriş yapabiliyor

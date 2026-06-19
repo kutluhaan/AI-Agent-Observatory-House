@@ -1,0 +1,103 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ChevronDown, LogOut, Plus } from "lucide-react";
+import { Logo } from "@/components/logo";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/auth";
+import { cn } from "@/lib/utils";
+
+function OrgBadge({
+  name,
+  role,
+}: {
+  name: string;
+  role: string | null;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-zinc-800 px-2.5 py-1.5 text-xs">
+      <span className="font-medium text-zinc-200">{name}</span>
+      {role && (
+        <span className="text-zinc-600">{role}</span>
+      )}
+      <ChevronDown size={12} className="text-zinc-600" />
+    </div>
+  );
+}
+
+function TopBar() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  return (
+    <header className="sticky top-0 z-30 flex h-12 items-center border-b border-zinc-900 bg-[#09090b]/90 px-4 backdrop-blur-sm">
+      <div className="flex flex-1 items-center gap-4">
+        <Link href="/">
+          <Logo size={22} showWordmark={false} />
+        </Link>
+
+        {/* Divider */}
+        <span className="h-4 w-px bg-zinc-800" />
+
+        {user?.org_name || user?.org_slug ? (
+          <button
+            onClick={() => router.push("/select-org")}
+            className="flex items-center"
+          >
+            <OrgBadge
+              name={user.org_name ?? user.org_slug ?? ""}
+              role={user.role}
+            />
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push("/create-org")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md border border-dashed border-zinc-800",
+              "px-2.5 py-1.5 text-xs text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-400",
+            )}
+          >
+            <Plus size={12} />
+            Create workspace
+          </button>
+        )}
+      </div>
+
+      {/* Right side */}
+      <div className="flex items-center gap-1">
+        {user && (
+          <span className="mr-2 text-xs text-zinc-600">{user.email}</span>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={logout}
+          title="Sign out"
+        >
+          <LogOut size={14} />
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+  const { loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <TopBar />
+      <main className="flex flex-1 flex-col">{children}</main>
+    </div>
+  );
+}
