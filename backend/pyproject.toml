@@ -46,6 +46,10 @@ dependencies = [
 
     # Test suite parsing
     "pyyaml>=6.0.0",
+
+    # M12: Research agent
+    "tavily-python>=0.7.0",
+    "trafilatura>=2.0.0",
 ]
 
 [project.optional-dependencies]

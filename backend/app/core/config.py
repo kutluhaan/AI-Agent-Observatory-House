@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ollama_base_url: str = "http://host.docker.internal:11434"
 
+    # M12: Research tools
+    tavily_api_key: str = ""
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"

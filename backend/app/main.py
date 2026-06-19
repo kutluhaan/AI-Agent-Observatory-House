@@ -71,6 +71,11 @@ async def lifespan(app: FastAPI):
     init_hitl_engine(redis)
     logger.info("HITL engine initialized")
 
+    # M12: Research tool'ları kaydet
+    from app.services.agent.tools.research import register_research_tools
+    register_research_tools()
+    logger.info("Research tools registered")
+
     yield
 
     # Shutdown
