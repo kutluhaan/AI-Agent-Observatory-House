@@ -21,7 +21,7 @@ const MODELS_BY_PROVIDER: Record<string, string[]> = {
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro"],
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"],
   anthropic: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5"],
-  ollama: ["llama3.1", "llama3.2", "qwen2.5", "mistral"],
+  ollama: ["qwen3:4b", "llama3.2", "qwen2.5", "mistral"],
 };
 
 export interface AgentFormValues {
