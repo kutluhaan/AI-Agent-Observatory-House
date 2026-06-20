@@ -27,11 +27,15 @@ async def _app_startup_state():
     """
     from app.core import clickhouse
     from app.services.agent.tools.builtin import register_builtin_tools
+    from app.services.agent.tools.files import register_file_tools
     from app.services.agent.tools.research import register_research_tools
+    from app.services.agent.tools.skills import register_skill_tools
     from app.services.hitl import init_hitl_engine
 
     register_builtin_tools()
     register_research_tools()
+    register_file_tools()
+    register_skill_tools()
     redis = await get_redis_pool()
     init_hitl_engine(redis)
     try:

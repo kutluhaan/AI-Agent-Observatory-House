@@ -67,6 +67,16 @@ async def lifespan(app: FastAPI):
     register_builtin_tools()
     logger.info("Agent built-in tools registered")
 
+    # Faz 3: Dosya sistemi tool'larını kaydet
+    from app.services.agent.tools.files import register_file_tools
+    register_file_tools()
+    logger.info("Agent file-system tools registered")
+
+    # Faz 4: Skill tool'larını kaydet
+    from app.services.agent.tools.skills import register_skill_tools
+    register_skill_tools()
+    logger.info("Agent skill tools registered")
+
     # M10: HITL Engine başlat
     init_hitl_engine(redis)
     logger.info("HITL engine initialized")
@@ -151,6 +161,10 @@ from app.api.v1.conversations import (
 )
 app.include_router(agent_conversations_router, prefix="/agents", tags=["conversations"])
 app.include_router(conversations_router, prefix="/conversations", tags=["conversations"])
+
+# Faz 4: Agent knowledge router
+from app.api.v1.knowledge import router as knowledge_router
+app.include_router(knowledge_router, prefix="/agents", tags=["knowledge"])
 
 # M10: HITL router
 from app.api.v1.hitl import router as hitl_router

@@ -27,6 +27,7 @@ class CreateAgentRequest(BaseModel):
     timeout_seconds: Annotated[int, Field(ge=5, le=_TIMEOUT_MAX)] = 120
     tool_names: list[str] = Field(default_factory=list, max_length=_TOOL_NAMES_MAX)
     hitl_tool_names: list[str] = Field(default_factory=list, max_length=_TOOL_NAMES_MAX)
+    file_system_enabled: bool = False
 
     @field_validator("provider")
     @classmethod
@@ -68,6 +69,7 @@ class UpdateAgentRequest(BaseModel):
     timeout_seconds: Annotated[int, Field(ge=5, le=_TIMEOUT_MAX)] | None = None
     tool_names: list[str] | None = None
     hitl_tool_names: list[str] | None = None
+    file_system_enabled: bool | None = None
     is_active: bool | None = None
 
     @field_validator("provider")
@@ -115,6 +117,7 @@ class AgentResponse(BaseModel):
     timeout_seconds: int
     tool_names: list[str]
     hitl_tool_names: list[str]
+    file_system_enabled: bool
     is_active: bool
     created_by: uuid.UUID | None
     created_at: str
@@ -135,6 +138,7 @@ class AgentResponse(BaseModel):
             timeout_seconds=agent.timeout_seconds,
             tool_names=agent.tool_names or [],
             hitl_tool_names=agent.hitl_tool_names or [],
+            file_system_enabled=agent.file_system_enabled,
             is_active=agent.is_active,
             created_by=agent.created_by,
             created_at=agent.created_at.isoformat(),

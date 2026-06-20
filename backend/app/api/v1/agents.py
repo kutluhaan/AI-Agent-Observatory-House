@@ -45,6 +45,9 @@ from app.services.agent.base import (
 )
 from app.services.agent.registry import ToolContext, ToolRegistry
 from app.services.agent.runner import AgentRunner
+from app.services.agent.tools.files import FILE_TOOL_NAMES
+from app.services.agent.tools.skills import SKILL_TOOL_NAMES
+from app.services.agent import file_store, knowledge_store
 from app.services.hitl import get_hitl_engine
 from app.services.providers.base import ProviderError
 from app.services.providers.factory import get_provider
@@ -82,19 +85,39 @@ async def _build_runner(
     parent_trace_id: str | None = None,
     history: list | None = None,
 ) -> AgentRunner:
+    # Dosya sistemi açıksa file tool'ları otomatik eklenir (DB'de saklanmaz)
+    effective_tools = list(agent.tool_names or [])
+    if agent.file_system_enabled:
+        effective_tools += FILE_TOOL_NAMES
+
+    # ask_user kullanıcıya doğrudan soru sorar — onay (HITL) gerektirmez
+    hitl_names = [n for n in (agent.hitl_tool_names or []) if n != "ask_user"]
+
+    # Faz 4: bilgi öğeleri — kurallar/anayasa system prompt'a, skill'ler tool ile
+    system_prompt = agent.system_prompt
+    always_on = await knowledge_store.load_always_on(db, agent.id)
+    if always_on:
+        system_prompt = f"{system_prompt}\n\n{always_on}"
+    if await knowledge_store.has_skills(db, agent.id):
+        effective_tools += SKILL_TOOL_NAMES
+        system_prompt += (
+            "\n\nYou have skills available. Call list_skills to discover them and "
+            "read_skill to read one before a task it covers."
+        )
+
     config = AgentConfig(
         agent_id=agent.id,
         org_id=ctx.org_id,  # type: ignore[arg-type]
         name=agent.name,
-        system_prompt=agent.system_prompt,
+        system_prompt=system_prompt,
         provider=agent.provider,
         model=agent.model,
         temperature=agent.temperature,
         max_tokens=agent.max_tokens,
         max_steps=agent.max_steps,
         timeout_seconds=agent.timeout_seconds,
-        tool_names=agent.tool_names or [],
-        hitl_tool_names=agent.hitl_tool_names or [],
+        tool_names=effective_tools,
+        hitl_tool_names=hitl_names,
     )
 
     # Kayıtsız tool varsa erken hata ver
@@ -125,6 +148,7 @@ async def _build_runner(
         trace_id=tracer.trace_id,
         db=db,
         redis=redis,
+        agent_id=agent.id,
     )
 
     try:
@@ -161,8 +185,14 @@ async def create_agent(
     if existing.scalar_one_or_none():
         raise AppError("AGENT_NAME_CONFLICT", f"An agent named '{body.name}' already exists.", 409)
 
-    # Kayıtsız tool varsa erken hata
+    # Kayıtsız tool varsa erken hata; file/skill tool'ları otomatik yönetilir
     for name in body.tool_names:
+        if name in FILE_TOOL_NAMES or name in SKILL_TOOL_NAMES:
+            raise AppError(
+                "TOOL_AUTO_MANAGED",
+                f"'{name}' is added automatically (file system / skills) — do not select it manually.",
+                422,
+            )
         try:
             ToolRegistry.get(name)
         except KeyError:
@@ -195,6 +225,7 @@ async def create_agent(
         timeout_seconds=body.timeout_seconds,
         tool_names=body.tool_names,
         hitl_tool_names=body.hitl_tool_names,
+        file_system_enabled=body.file_system_enabled,
         is_active=True,
     )
     db.add(agent)
@@ -224,9 +255,12 @@ async def list_agents(
 async def list_available_tools(
     ctx: TenantContext = Depends(require_role("member")),
 ):
-    """Kayıtlı tool isimlerini ve tanımlarını listeler."""
+    """Kayıtlı tool isimlerini listeler. File tool'ları hariç — dosya sistemi
+    açılınca otomatik eklenirler, tek tek seçilmezler."""
     tools = []
     for name in ToolRegistry.all_names():
+        if name in FILE_TOOL_NAMES or name in SKILL_TOOL_NAMES:
+            continue
         handler = ToolRegistry.get(name)
         tools.append({
             "name": handler.name,
@@ -244,6 +278,43 @@ async def get_agent(
 ):
     agent = await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
     return success(AgentResponse.from_orm(agent).model_dump())
+
+
+# ─── Dosya gezgini (salt-okunur, Faz 3) ──────────────────
+
+@router.get("/{agent_id}/files")
+async def list_agent_files(
+    agent_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Agent'ın dosya sistemindeki tüm dosya/klasörleri listeler (ağaç UI'da kurulur)."""
+    await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
+    files = await file_store.list_all(db, agent_id)
+    return success([
+        {
+            "path": f.path,
+            "is_dir": f.is_dir,
+            "size_bytes": f.size_bytes,
+            "updated_at": f.updated_at.isoformat(),
+        }
+        for f in files
+    ])
+
+
+@router.get("/{agent_id}/files/content")
+async def get_agent_file_content(
+    agent_id: uuid.UUID,
+    path: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Tek bir dosyanın içeriğini döner (görüntüleme/indirme için)."""
+    await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
+    f = await file_store.get_one(db, agent_id, path)
+    if f is None or f.is_dir:
+        raise NotFoundError("FILE_NOT_FOUND", "File not found.")
+    return success({"path": f.path, "content": f.content or "", "size_bytes": f.size_bytes})
 
 
 @router.patch("/{agent_id}")
@@ -268,6 +339,12 @@ async def update_agent(
 
     if body.tool_names is not None:
         for name in body.tool_names:
+            if name in FILE_TOOL_NAMES or name in SKILL_TOOL_NAMES:
+                raise AppError(
+                    "TOOL_AUTO_MANAGED",
+                    f"'{name}' is added automatically (file system / skills).",
+                    422,
+                )
             try:
                 ToolRegistry.get(name)
             except KeyError:
@@ -398,8 +475,8 @@ async def _sse_generator(
                 ).to_sse()
                 return
             yield event.to_sse()
-            # Her HITL bekleme penceresi için timeout'u uzat
-            if event.type == "hitl_requested":
+            # Her HITL/ask_user bekleme penceresi için timeout'u uzat
+            if event.type in ("hitl_requested", "ask_user_requested"):
                 timeout_at += HITL_TIMEOUT
     except Exception as exc:
         logger.error("sse_generator.error", error=str(exc))

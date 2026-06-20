@@ -14,7 +14,18 @@ import {
   Plus,
   MessageSquare,
   Trash2,
+  Brain,
+  ListChecks,
+  CheckCircle2,
+  Circle,
+  CircleDot,
+  HelpCircle,
+  FolderTree,
+  AlertTriangle,
+  ChevronDown,
+  BookOpen,
 } from "lucide-react";
+import { friendlyError } from "@/lib/errors";
 import {
   api,
   ApiError,
@@ -48,12 +59,23 @@ interface ChatMessage {
   segments: Segment[];
   traceId?: string;
   error?: string;
+  errorCode?: string;
   running?: boolean;
 }
 interface HitlState {
   requestId: string;
   toolName: string;
   args: Record<string, unknown>;
+}
+interface QuestionState {
+  requestId: string;
+  question: string;
+  options: string[];
+  multi: boolean;
+}
+interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
 }
 
 // Backend'de saklanan mesajı UI mesajına çevir
@@ -109,6 +131,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [hitl, setHitl] = useState<HitlState | null>(null);
+  const [question, setQuestion] = useState<QuestionState | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -135,7 +158,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, hitl]);
+  }, [messages, hitl, question]);
 
   async function openConversation(conversationId: string) {
     setActiveId(conversationId);
@@ -235,6 +258,19 @@ export default function ChatPage() {
         case "hitl_resolved":
           setHitl(null);
           break;
+        case "ask_user_requested":
+          if (ev.hitl_request_id) {
+            setQuestion({
+              requestId: ev.hitl_request_id,
+              question: ev.question ?? "",
+              options: ev.question_options ?? [],
+              multi: ev.question_multi ?? false,
+            });
+          }
+          break;
+        case "ask_user_answered":
+          setQuestion(null);
+          break;
         case "done":
           patchAssistant((m) => ({ ...m, running: false, traceId: ev.trace_id }));
           setRunning(false);
@@ -244,14 +280,25 @@ export default function ChatPage() {
             ...m,
             running: false,
             error: ev.error_message ?? ev.error_code ?? "Agent error.",
+            errorCode: ev.error_code,
           }));
           setRunning(false);
           setHitl(null);
+          setQuestion(null);
           break;
       }
     },
     [patchAssistant],
   );
+
+  async function submitAnswer(answer: string) {
+    if (!question) return;
+    try {
+      await api.post(`/hitl/${question.requestId}/answer`, { answer });
+    } catch (err) {
+      if (err instanceof ApiError) setQuestion(null);
+    }
+  }
 
   async function ensureConversation(): Promise<string> {
     if (activeId) return activeId;
@@ -387,12 +434,32 @@ export default function ChatPage() {
             <span className="text-sm font-medium text-zinc-100">{agent?.name ?? "…"}</span>
             {agent && <span className="text-[11px] text-zinc-600">{agent.provider} · {agent.model}</span>}
           </div>
-          {agent && agent.hitl_tool_names.length > 0 && (
-            <Badge variant="amber">
-              <ShieldCheck size={10} />
-              Onay gerektiren araçlar
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {agent && (
+              <Link
+                href={`/agents/${id}/knowledge`}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+              >
+                <BookOpen size={12} />
+                Bilgi
+              </Link>
+            )}
+            {agent?.file_system_enabled && (
+              <Link
+                href={`/agents/${id}/files`}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+              >
+                <FolderTree size={12} />
+                Dosyalar
+              </Link>
+            )}
+            {agent && agent.hitl_tool_names.length > 0 && (
+              <Badge variant="amber">
+                <ShieldCheck size={10} />
+                Onay gerektiren araçlar
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
@@ -444,6 +511,8 @@ export default function ChatPage() {
         onReject={(reason) => resolveHitl("reject", reason)}
         onModify={(args) => modifyHitl(args)}
       />
+
+      <QuestionModal state={question} onSubmit={submitAnswer} />
     </div>
   );
 }
@@ -452,15 +521,20 @@ export default function ChatPage() {
 
 function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: string }) {
   const isUser = msg.role === "user";
+  // Sadece SON write_todos segmenti panel olarak render edilir (canlı güncellenir)
+  let lastTodosIdx = -1;
+  msg.segments.forEach((s, i) => {
+    if (s.kind === "tool" && s.tool.name === "write_todos") lastTodosIdx = i;
+  });
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", isUser ? "bg-zinc-800" : "bg-indigo-500/10")}>
         {isUser ? <UserIcon size={14} className="text-zinc-400" /> : <Bot size={14} className="text-indigo-400" />}
       </div>
       <div className={cn("flex max-w-[85%] flex-col gap-2", isUser && "items-end")}>
-        {msg.segments.map((seg, i) =>
-          seg.kind === "text" ? (
-            seg.text ? (
+        {msg.segments.map((seg, i) => {
+          if (seg.kind === "text") {
+            return seg.text ? (
               <div
                 key={i}
                 className={cn(
@@ -470,18 +544,26 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
               >
                 {seg.text}
               </div>
-            ) : null
-          ) : (
-            <ToolCard key={i} tool={seg.tool} />
-          ),
-        )}
+            ) : null;
+          }
+          const name = seg.tool.name;
+          if (name === "think") {
+            return <ReasoningBlock key={i} thought={String(seg.tool.args.thought ?? "")} />;
+          }
+          if (name === "write_todos") {
+            return i === lastTodosIdx ? (
+              <TodosPanel key={i} todos={(seg.tool.args.todos as TodoItem[]) ?? []} />
+            ) : null;
+          }
+          return <ToolCard key={i} tool={seg.tool} />;
+        })}
         {msg.running && msg.segments.every((s) => s.kind !== "text" || !s.text) && (
           <div className="flex items-center gap-2 px-1 text-xs text-zinc-600">
             <Spinner className="h-3 w-3" />
             düşünüyor…
           </div>
         )}
-        {msg.error && <Alert variant="error">{msg.error}</Alert>}
+        {msg.error && <ErrorBlock code={msg.errorCode} message={msg.error} />}
         {msg.traceId && (
           <Link
             href={`/traces/${msg.traceId}${traceSuffix}`}
@@ -519,6 +601,185 @@ function ToolCard({ tool }: { tool: ToolBlock }) {
         <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-[11px] text-zinc-400">{tool.result}</p>
       )}
     </div>
+  );
+}
+
+// ── Hata bloğu (anlamlı + katlanır teknik detay) ────────────
+
+function ErrorBlock({ code, message }: { code?: string; message: string }) {
+  const [open, setOpen] = useState(false);
+  const e = friendlyError(code, message);
+  return (
+    <div className="w-full rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-3 text-sm text-red-300">
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" />
+        <div className="flex-1">
+          <p className="leading-relaxed">{e.title}</p>
+          {e.hint && <p className="mt-1 text-xs text-red-300/70">{e.hint}</p>}
+          {e.detail && (
+            <>
+              <button
+                onClick={() => setOpen((o) => !o)}
+                className="mt-1.5 flex items-center gap-1 text-[11px] text-red-300/60 transition-colors hover:text-red-300"
+              >
+                <ChevronDown size={11} className={cn("transition-transform", open && "rotate-180")} />
+                Teknik detay
+              </button>
+              {open && (
+                <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded bg-red-950/30 p-2 text-[11px] text-red-300/80">
+                  {e.detail}
+                </pre>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reasoning (think) bloğu ─────────────────────────────────
+
+function ReasoningBlock({ thought }: { thought: string }) {
+  return (
+    <div className="flex gap-2 rounded-lg border border-zinc-800/60 bg-zinc-900/30 px-3 py-2 text-xs text-zinc-400">
+      <Brain size={13} className="mt-0.5 shrink-0 text-violet-400" />
+      <span className="whitespace-pre-wrap italic leading-relaxed">{thought}</span>
+    </div>
+  );
+}
+
+// ── To-do paneli (write_todos) ──────────────────────────────
+
+function TodosPanel({ todos }: { todos: TodoItem[] }) {
+  if (!todos || todos.length === 0) return null;
+  const done = todos.filter((t) => t.status === "completed").length;
+  return (
+    <div className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5 text-xs">
+      <div className="mb-2 flex items-center gap-2 text-zinc-300">
+        <ListChecks size={13} className="text-indigo-400" />
+        <span className="font-medium">Görevler</span>
+        <span className="text-zinc-600">
+          {done}/{todos.length}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        {todos.map((t, i) => (
+          <div key={i} className="flex items-start gap-2">
+            {t.status === "completed" ? (
+              <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green-400" />
+            ) : t.status === "in_progress" ? (
+              <CircleDot size={13} className="mt-0.5 shrink-0 text-indigo-400" />
+            ) : (
+              <Circle size={13} className="mt-0.5 shrink-0 text-zinc-600" />
+            )}
+            <span
+              className={cn(
+                "leading-relaxed",
+                t.status === "completed" ? "text-zinc-600 line-through" : "text-zinc-300",
+              )}
+            >
+              {t.content}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── ask_user soru formu ─────────────────────────────────────
+
+function QuestionModal({
+  state,
+  onSubmit,
+}: {
+  state: QuestionState | null;
+  onSubmit: (answer: string) => void;
+}) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [freeText, setFreeText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (state) {
+      setSelected([]);
+      setFreeText("");
+      setBusy(false);
+    }
+  }, [state]);
+
+  if (!state) return null;
+
+  function toggle(opt: string) {
+    if (state!.multi) {
+      setSelected((prev) => (prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]));
+    } else {
+      setSelected([opt]);
+    }
+  }
+
+  function submit() {
+    const parts = [...selected];
+    if (freeText.trim()) parts.push(freeText.trim());
+    const answer = parts.join(state!.multi ? ", " : " — ") || "(boş)";
+    setBusy(true);
+    onSubmit(answer);
+  }
+
+  const canSubmit = selected.length > 0 || freeText.trim().length > 0;
+
+  return (
+    <Modal open title="Agent sana bir soru soruyor">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-2.5 text-sm text-zinc-200">
+          <HelpCircle size={16} className="mt-0.5 shrink-0 text-indigo-400" />
+          <span className="leading-relaxed">{state.question}</span>
+        </div>
+
+        {state.options.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {state.options.map((opt) => {
+              const isSel = selected.includes(opt);
+              const Icon = isSel ? (state.multi ? CheckCircle2 : CircleDot) : Circle;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => toggle(opt)}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                    isSel
+                      ? "border-indigo-500/40 bg-indigo-500/10 text-zinc-100"
+                      : "border-zinc-800 text-zinc-300 hover:border-zinc-700",
+                  )}
+                >
+                  <Icon size={15} className={isSel ? "text-indigo-400" : "text-zinc-600"} />
+                  <span>{opt}</span>
+                </button>
+              );
+            })}
+            {state.multi && (
+              <p className="px-1 text-[11px] text-zinc-600">Birden fazla seçebilirsin.</p>
+            )}
+          </div>
+        )}
+
+        <Textarea
+          label={state.options.length > 0 ? "Veya kendi yanıtını yaz" : "Yanıtın"}
+          value={freeText}
+          onChange={(e) => setFreeText(e.target.value)}
+          rows={2}
+          placeholder="Serbest metin…"
+        />
+
+        <div className="flex justify-end">
+          <Button size="sm" onClick={submit} disabled={busy || !canSubmit}>
+            Gönder
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

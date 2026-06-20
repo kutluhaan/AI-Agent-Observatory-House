@@ -17,6 +17,8 @@ from app.models.provider import ProviderCredential
 from app.models.agent import Agent
 from app.models.test_suite import TestSuite, TestCase, TestRun, TestCaseResult
 from app.models.conversation import Conversation, ConversationMessage
+from app.models.agent_file import AgentFile
+from app.models.agent_knowledge import AgentKnowledge
 
 __all__ = [
     "User",
@@ -35,4 +37,6 @@ __all__ = [
     "TestCaseResult",
     "Conversation",
     "ConversationMessage",
+    "AgentFile",
+    "AgentKnowledge",
 ]

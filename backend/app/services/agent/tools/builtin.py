@@ -102,6 +102,96 @@ def register_builtin_tools() -> None:
             logger.warning("call_agent.error", agent_id=agent_id, error=str(exc))
             return f"[call_agent error: {exc}]"
 
+    # ── think ─────────────────────────────────────────────
+
+    @ToolRegistry.register(
+        name="think",
+        description=(
+            "Think step by step before acting. Use this to reason about the problem, "
+            "plan your approach, or reflect on tool results. The thought is shown to the "
+            "user as a reasoning step but does not perform any action."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "thought": {"type": "string", "description": "Your reasoning or plan."},
+            },
+            "required": ["thought"],
+        },
+    )
+    async def think(ctx: ToolContext, thought: str) -> str:
+        # İçerik tool argümanlarında zaten taşınıyor (UI reasoning bloğu olarak render eder).
+        return "Acknowledged."
+
+    # ── write_todos ───────────────────────────────────────
+
+    @ToolRegistry.register(
+        name="write_todos",
+        description=(
+            "Write or update a task checklist for a multi-step job. Call this with the FULL "
+            "list each time, updating each item's status as you progress "
+            "(pending → in_progress → completed). The list is shown to the user and updates live."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "todos": {
+                    "type": "array",
+                    "description": "The full to-do list (re-send all items every time).",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "What to do."},
+                            "status": {
+                                "type": "string",
+                                "enum": ["pending", "in_progress", "completed"],
+                            },
+                        },
+                        "required": ["content", "status"],
+                    },
+                },
+            },
+            "required": ["todos"],
+        },
+    )
+    async def write_todos(ctx: ToolContext, todos: list) -> str:
+        if not isinstance(todos, list):
+            return "[write_todos error: 'todos' must be a list]"
+        done = sum(1 for t in todos if isinstance(t, dict) and t.get("status") == "completed")
+        return f"To-do list updated: {len(todos)} item(s), {done} completed."
+
+    # ── ask_user ──────────────────────────────────────────
+
+    @ToolRegistry.register(
+        name="ask_user",
+        description=(
+            "Ask the user a question and wait for their answer before continuing. Use when you "
+            "need a decision, preference, or missing information. Provide 'options' for a choice "
+            "(set 'multi' true to allow multiple selections); the user can also type a free-text "
+            "answer. Returns the user's answer."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "The question to ask."},
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional choices to present.",
+                },
+                "multi": {
+                    "type": "boolean",
+                    "description": "Allow selecting multiple options. Default false.",
+                },
+            },
+            "required": ["question"],
+        },
+    )
+    async def ask_user(ctx: ToolContext, question: str, options: list | None = None, multi: bool = False) -> str:
+        # Runner bu tool'u (hitl engine varsa) yakalayıp kullanıcıdan yanıt alır.
+        # Buraya düşülürse mekanizma yok demektir.
+        return "(User input is not available in this context.)"
+
 
 # ─── Safe arithmetic evaluator ───────────────────────────
 

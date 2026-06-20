@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bot, Plus, MessageSquare, ShieldCheck } from "lucide-react";
-import { api, type Agent } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { Bot, Plus, MessageSquare, ShieldCheck, FolderTree, Trash2 } from "lucide-react";
+import { api, ApiError, type Agent } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function AgentsPage() {
+  const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -21,6 +23,22 @@ export default function AgentsPage() {
       .catch(() => setError("Failed to load agents."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleDelete(agent: Agent) {
+    if (
+      !window.confirm(
+        `"${agent.name}" agent'ını silmek istediğine emin misin? Sohbetleri ve dosyaları da silinir, bu işlem geri alınamaz.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.delete(`/agents/${agent.id}`);
+      setAgents((prev) => prev.filter((a) => a.id !== agent.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Agent silinemedi.");
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
@@ -56,10 +74,10 @@ export default function AgentsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {agents.map((agent) => (
-            <Link
+            <div
               key={agent.id}
-              href={`/agents/${agent.id}/chat`}
-              className="group flex flex-col gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70"
+              onClick={() => router.push(`/agents/${agent.id}/chat`)}
+              className="group relative flex cursor-pointer flex-col gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70"
             >
               <div className="flex items-start justify-between">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10">
@@ -67,12 +85,28 @@ export default function AgentsPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {!agent.is_active && <Badge variant="zinc">inactive</Badge>}
+                  {agent.file_system_enabled && (
+                    <Badge variant="indigo">
+                      <FolderTree size={10} />
+                      FS
+                    </Badge>
+                  )}
                   {agent.hitl_tool_names.length > 0 && (
                     <Badge variant="amber">
                       <ShieldCheck size={10} />
                       HITL
                     </Badge>
                   )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(agent);
+                    }}
+                    title="Agent'ı sil"
+                    className="rounded-md p-1 text-zinc-600 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
               <div>
@@ -90,7 +124,7 @@ export default function AgentsPage() {
                   Chat
                 </span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

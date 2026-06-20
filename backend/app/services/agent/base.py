@@ -57,6 +57,7 @@ class AgentStreamEvent:
     type: Literal[
         "token", "tool_call_start", "tool_call_end",
         "hitl_requested", "hitl_resolved",
+        "ask_user_requested", "ask_user_answered",
         "step_done", "done", "error",
     ]
     content: str | None = None
@@ -74,6 +75,11 @@ class AgentStreamEvent:
     hitl_request_id: str | None = None
     hitl_action: str | None = None        # approved | modified | rejected
     hitl_modified_arguments: dict[str, Any] | None = None
+    # ask_user (kullanıcıya soru) fields
+    question: str | None = None
+    question_options: list[str] | None = None
+    question_multi: bool | None = None
+    answer: str | None = None
 
     def to_sse(self) -> str:
         """
@@ -86,11 +92,9 @@ class AgentStreamEvent:
             "content", "tool_name", "tool_arguments", "tool_result",
             "step", "finish_reason", "trace_id", "steps_taken",
             "total_usage", "error_code", "error_message",
+            "hitl_request_id", "hitl_action", "hitl_modified_arguments",
+            "question", "question_options", "question_multi", "answer",
         ):
-            val = getattr(self, key)
-            if val is not None:
-                payload[key] = val
-        for key in ("hitl_request_id", "hitl_action", "hitl_modified_arguments"):
             val = getattr(self, key)
             if val is not None:
                 payload[key] = val

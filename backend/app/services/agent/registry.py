@@ -18,12 +18,14 @@ from app.services.providers.base import ToolDefinition
 class ToolContext:
     """
     Tool handler'larına inject edilen çalışma zamanı context'i.
-    DB erişimi gerektiren tool'lar (call_agent) bunu kullanır.
+    DB erişimi gerektiren tool'lar (call_agent, file tool'ları) bunu kullanır.
+    agent_id: izole dosya sistemi tool'ları için — hangi agent'ın FS'i.
     """
     org_id: uuid.UUID
     trace_id: str
     db: Any  # AsyncSession — circular import'u önlemek için Any
     redis: Any  # aioredis.Redis
+    agent_id: uuid.UUID | None = None
 
 
 @dataclass

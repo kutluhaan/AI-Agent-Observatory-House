@@ -333,7 +333,7 @@ async def _stream_and_persist(
             elif ev.type == "error":
                 error = ev.error_message or ev.error_code
             yield ev.to_sse()
-            if ev.type == "hitl_requested":
+            if ev.type in ("hitl_requested", "ask_user_requested"):
                 timeout_at += HITL_TIMEOUT
             if asyncio.get_running_loop().time() > timeout_at:
                 error = error or "Agent timed out."

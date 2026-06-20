@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck, FolderTree } from "lucide-react";
 import { api, ApiError, type Agent, type AgentTool } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ export default function NewAgentPage() {
   const [tools, setTools] = useState<AgentTool[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hitl, setHitl] = useState<Set<string>>(new Set());
+  const [fileSystem, setFileSystem] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -83,6 +84,7 @@ export default function NewAgentPage() {
         temperature,
         tool_names: Array.from(selected),
         hitl_tool_names: Array.from(hitl),
+        file_system_enabled: fileSystem,
       });
       router.replace(`/agents/${agent.id}/chat`);
     } catch (err) {
@@ -153,6 +155,33 @@ export default function NewAgentPage() {
           onChange={(e) => setTemperature(parseFloat(e.target.value))}
         />
 
+        {/* Dosya sistemi — açılırsa dosya tool'ları otomatik eklenir */}
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-3 transition-colors",
+            fileSystem ? "border-indigo-500/30 bg-indigo-500/5" : "border-zinc-800",
+          )}
+        >
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={fileSystem}
+              onChange={(e) => setFileSystem(e.target.checked)}
+              className="mt-0.5 accent-indigo-500"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5">
+                <FolderTree size={14} className="text-indigo-400" />
+                <span className="text-sm text-zinc-200">Dosya sistemi</span>
+              </div>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Agent&apos;a izole, kalıcı bir dosya sistemi ver. Açılırsa dosya
+                araçları (yaz/oku/düzenle/sil/listele/ara/klasör/taşı) otomatik eklenir.
+              </p>
+            </div>
+          </label>
+        </div>
+
         {tools.length > 0 && (
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium tracking-wide text-zinc-400">
@@ -184,7 +213,7 @@ export default function NewAgentPage() {
                         <p className="text-xs text-zinc-600">{tool.description}</p>
                       </div>
                     </label>
-                    {isSelected && (
+                    {isSelected && tool.name !== "ask_user" && (
                       <label className="mt-2 flex cursor-pointer items-center gap-2 pl-7 text-xs text-amber-300/80">
                         <input
                           type="checkbox"

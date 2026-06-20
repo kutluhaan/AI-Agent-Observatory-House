@@ -41,18 +41,21 @@ class HITLRequest:
     org_id: str
     tool_name: str
     tool_arguments: dict[str, Any]
-    status: str           # pending | approved | rejected | modified
+    status: str           # pending | approved | rejected | modified | answered
     created_at: str
     expires_at: str
     reason: str | None = None
     modified_arguments: dict[str, Any] | None = None
+    kind: str = "approval"   # approval | question
+    answer: str | None = None
 
 
 @dataclass
 class HITLResolution:
-    action: Literal["approved", "rejected", "modified"]
+    action: Literal["approved", "rejected", "modified", "answered"]
     modified_arguments: dict[str, Any] | None = None
     reason: str | None = None
+    answer: str | None = None
 
 
 class HITLNotFoundError(Exception):
@@ -88,10 +91,12 @@ class HITLEngine:
         org_id: str,
         tool_name: str,
         tool_arguments: dict[str, Any],
+        kind: str = "approval",
     ) -> str:
         """
         HITL isteği oluşturur; Redis'e yazar ve in-memory Event kaydeder.
         request_id döner — runner bunu SSE event'ine ekler.
+        kind="approval" (tool onayı) | "question" (ask_user — kullanıcıdan yanıt).
         """
         request_id = str(uuid.uuid4())
         now = datetime.now(UTC)
@@ -108,6 +113,8 @@ class HITLEngine:
             "expires_at": expires.isoformat(),
             "reason": None,
             "modified_arguments": None,
+            "kind": kind,
+            "answer": None,
         }
         await self.redis.set(
             f"{_KEY_PREFIX}{request_id}",
@@ -198,6 +205,38 @@ class HITLEngine:
 
         return _data_to_request(data)
 
+    async def submit_answer(self, request_id: str, answer: str) -> HITLRequest:
+        """
+        ask_user (kind=question) isteğine kullanıcı yanıtını işler. Bekleyen runner'ı uyandırır.
+
+        Raises:
+            HITLNotFoundError / HITLAlreadyResolvedError.
+        """
+        key = f"{_KEY_PREFIX}{request_id}"
+        raw = await self.redis.get(key)
+        if raw is None:
+            raise HITLNotFoundError(f"Question '{request_id}' not found or expired.")
+
+        data: dict[str, Any] = json.loads(raw)
+        if data["status"] != "pending":
+            raise HITLAlreadyResolvedError(request_id, data["status"])
+
+        data["status"] = "answered"
+        data["answer"] = answer
+        await self.redis.set(key, json.dumps(data), ex=_KEY_TTL_AFTER_RESOLVE)
+
+        resolution = HITLResolution(action="answered", answer=answer)
+        entry = self._pending.get(request_id)
+        if entry:
+            event, resolutions = entry
+            resolutions.append(resolution)
+            event.set()
+            logger.info("hitl.answered", request_id=request_id)
+        else:
+            logger.warning("hitl.answer.no_waiter", request_id=request_id)
+
+        return _data_to_request(data)
+
     async def get(self, request_id: str) -> HITLRequest | None:
         """Redis'ten istek bilgisini okur. Yoksa None döner."""
         raw = await self.redis.get(f"{_KEY_PREFIX}{request_id}")
@@ -218,6 +257,8 @@ def _data_to_request(data: dict[str, Any]) -> HITLRequest:
         expires_at=data["expires_at"],
         reason=data.get("reason"),
         modified_arguments=data.get("modified_arguments"),
+        kind=data.get("kind", "approval"),
+        answer=data.get("answer"),
     )
 
 

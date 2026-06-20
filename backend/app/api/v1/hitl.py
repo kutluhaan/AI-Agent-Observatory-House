@@ -37,6 +37,8 @@ class HITLRequestResponse(BaseModel):
     expires_at: str
     reason: str | None = None
     modified_arguments: dict[str, Any] | None = None
+    kind: str = "approval"
+    answer: str | None = None
 
 
 class ModifyBody(BaseModel):
@@ -46,6 +48,10 @@ class ModifyBody(BaseModel):
 
 class RejectBody(BaseModel):
     reason: str | None = None
+
+
+class AnswerBody(BaseModel):
+    answer: str
 
 
 # ─── Helpers ──────────────────────────────────────────────
@@ -135,6 +141,27 @@ async def modify_hitl(
         )
     except HITLNotFoundError:
         raise AppError("HITL_NOT_FOUND", f"HITL request '{request_id}' not found or expired.", 404)
+    except HITLAlreadyResolvedError as exc:
+        raise AppError("HITL_ALREADY_RESOLVED", str(exc), 409)
+    return success(HITLRequestResponse(**req.__dict__).model_dump())
+
+
+@router.post("/{request_id}/answer")
+async def answer_hitl(
+    request_id: str,
+    body: AnswerBody,
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """ask_user (kind=question) isteğine kullanıcının yanıtını iletir; agent devam eder."""
+    hitl = get_hitl_engine()
+    existing = await hitl.get(request_id)
+    if existing is None:
+        raise AppError("HITL_NOT_FOUND", f"Question '{request_id}' not found or expired.", 404)
+    _assert_org(existing.org_id, str(ctx.org_id))
+    try:
+        req = await hitl.submit_answer(request_id, body.answer)
+    except HITLNotFoundError:
+        raise AppError("HITL_NOT_FOUND", f"Question '{request_id}' not found or expired.", 404)
     except HITLAlreadyResolvedError as exc:
         raise AppError("HITL_ALREADY_RESOLVED", str(exc), 409)
     return success(HITLRequestResponse(**req.__dict__).model_dump())

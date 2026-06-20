@@ -78,9 +78,10 @@ class AgentRunner(BaseAgent):
 
     async def run(self, user_input: str) -> AgentResult:
         """Timeout koruması ile tam çalıştırma."""
-        # HITL beklemesi olabilecek agent'lara 10 dk ekstra süre tanı
+        # HITL onayı veya ask_user beklemesi olabilecek agent'lara 10 dk ekstra süre tanı
         from app.services.hitl import HITL_TIMEOUT
-        hitl_extra = HITL_TIMEOUT if self.config.hitl_tool_names else 0
+        waits_for_human = bool(self.config.hitl_tool_names) or "ask_user" in self.config.tool_names
+        hitl_extra = HITL_TIMEOUT if waits_for_human else 0
         try:
             return await asyncio.wait_for(
                 self._execute(user_input),
@@ -205,6 +206,45 @@ class AgentRunner(BaseAgent):
                                 arguments_dict = {}
                         else:
                             arguments_dict = raw_arguments or {}
+
+                        # ask_user — kullanıcıdan yanıt al (tool kartı değil, soru formu)
+                        if tool_name == "ask_user" and self.hitl:
+                            question = str(arguments_dict.get("question", ""))
+                            options = arguments_dict.get("options") or []
+                            multi = bool(arguments_dict.get("multi", False))
+                            request_id = await self.hitl.create_request(
+                                trace_id=self.tracer.trace_id,
+                                org_id=str(self.config.org_id),
+                                tool_name="ask_user",
+                                tool_arguments={"question": question, "options": options, "multi": multi},
+                                kind="question",
+                            )
+                            await self.tracer.event("user_question", {
+                                "request_id": request_id, "question": question,
+                                "options": options, "multi": multi, "step": step,
+                            })
+                            if self.ws_manager:
+                                await self.ws_manager.broadcast(str(self.config.org_id), {
+                                    "type": "user_question", "request_id": request_id,
+                                    "trace_id": self.tracer.trace_id, "question": question,
+                                    "options": options, "multi": multi,
+                                })
+                            yield AgentStreamEvent(
+                                type="ask_user_requested", tool_name="ask_user", step=step,
+                                hitl_request_id=request_id, question=question,
+                                question_options=options, question_multi=multi,
+                            )
+                            resolution = await self.hitl.wait_for_resolution(request_id)
+                            answer = resolution.answer or "(no answer provided)"
+                            await self.tracer.event("user_answered", {
+                                "request_id": request_id, "answer": answer, "step": step,
+                            })
+                            yield AgentStreamEvent(
+                                type="ask_user_answered", step=step,
+                                hitl_request_id=request_id, answer=answer,
+                            )
+                            messages.append(Message(role="tool", content=answer, tool_call_id=call_id))
+                            continue
 
                         yield AgentStreamEvent(
                             type="tool_call_start",
@@ -406,6 +446,12 @@ class AgentRunner(BaseAgent):
                     else:
                         arguments = raw_arguments or {}
 
+                    # ask_user — sync yolda da kullanıcı yanıtını bekle
+                    if tool_name == "ask_user" and self.hitl:
+                        answer = await self._ask_user_sync(arguments, step)
+                        messages.append(Message(role="tool", content=answer, tool_call_id=call_id))
+                        continue
+
                     await self.tracer.event("tool_call_start", {
                         "name": tool_name,
                         "arguments": arguments,
@@ -491,6 +537,35 @@ class AgentRunner(BaseAgent):
             return resolution.modified_arguments
 
         return arguments
+
+    async def _ask_user_sync(self, args: dict[str, Any], step: int) -> str:
+        """Sync path için ask_user — kullanıcı yanıtını bekler, cevap string'ini döner."""
+        question = str(args.get("question", ""))
+        options = args.get("options") or []
+        multi = bool(args.get("multi", False))
+        request_id = await self.hitl.create_request(
+            trace_id=self.tracer.trace_id,
+            org_id=str(self.config.org_id),
+            tool_name="ask_user",
+            tool_arguments={"question": question, "options": options, "multi": multi},
+            kind="question",
+        )
+        await self.tracer.event("user_question", {
+            "request_id": request_id, "question": question,
+            "options": options, "multi": multi, "step": step,
+        })
+        if self.ws_manager:
+            await self.ws_manager.broadcast(str(self.config.org_id), {
+                "type": "user_question", "request_id": request_id,
+                "trace_id": self.tracer.trace_id, "question": question,
+                "options": options, "multi": multi,
+            })
+        resolution = await self.hitl.wait_for_resolution(request_id)
+        answer = resolution.answer or "(no answer provided)"
+        await self.tracer.event("user_answered", {
+            "request_id": request_id, "answer": answer, "step": step,
+        })
+        return answer
 
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any] | str) -> str:
         """Tool handler'ı çalıştırır, hataları AgentToolError'a çevirir.
