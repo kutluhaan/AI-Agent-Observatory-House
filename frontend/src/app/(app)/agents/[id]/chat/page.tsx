@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -17,9 +11,20 @@ import {
   Activity,
   User as UserIcon,
   Bot,
+  Plus,
+  MessageSquare,
+  Trash2,
 } from "lucide-react";
-import { api, ApiError, type Agent } from "@/lib/api";
-import { runAgentStream, type AgentStreamEvent } from "@/lib/stream";
+import {
+  api,
+  ApiError,
+  type Agent,
+  type ConversationSummary,
+  type ConversationDetail,
+  type ConversationMessage,
+} from "@/lib/api";
+import { streamConversationMessage, type AgentStreamEvent } from "@/lib/stream";
+import { toolLabel, formatArgs } from "@/lib/tools";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert } from "@/components/ui/alert";
@@ -37,9 +42,7 @@ interface ToolBlock {
   result?: string;
   status: "running" | "done";
 }
-type Segment =
-  | { kind: "text"; text: string }
-  | { kind: "tool"; tool: ToolBlock };
+type Segment = { kind: "text"; text: string } | { kind: "tool"; tool: ToolBlock };
 interface ChatMessage {
   role: "user" | "assistant";
   segments: Segment[];
@@ -47,11 +50,52 @@ interface ChatMessage {
   error?: string;
   running?: boolean;
 }
-
 interface HitlState {
   requestId: string;
   toolName: string;
   args: Record<string, unknown>;
+}
+
+// Backend'de saklanan mesajı UI mesajına çevir
+function toChatMessage(m: ConversationMessage): ChatMessage {
+  if (m.role === "user") {
+    return { role: "user", segments: [{ kind: "text", text: m.content }] };
+  }
+  const segs: Segment[] = [];
+  for (const raw of (m.segments ?? []) as Array<Record<string, unknown>>) {
+    if (raw.kind === "text") {
+      segs.push({ kind: "text", text: String(raw.text ?? "") });
+    } else if (raw.kind === "tool") {
+      const t = raw.tool as Record<string, unknown>;
+      segs.push({
+        kind: "tool",
+        tool: {
+          id: `${String(t.name)}-${segs.length}`,
+          name: String(t.name),
+          args: (t.args as Record<string, unknown>) ?? {},
+          result: t.result ? String(t.result) : undefined,
+          status: t.status === "running" ? "running" : "done",
+        },
+      });
+    }
+  }
+  if (segs.length === 0 && m.content) segs.push({ kind: "text", text: m.content });
+  return {
+    role: "assistant",
+    segments: segs,
+    traceId: m.trace_id ?? undefined,
+    error: m.error ?? undefined,
+  };
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "şimdi";
+  if (m < 60) return `${m} dk`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} sa`;
+  return `${Math.floor(h / 24)} g`;
 }
 
 export default function ChatPage() {
@@ -59,6 +103,8 @@ export default function ChatPage() {
 
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
@@ -66,33 +112,70 @@ export default function ChatPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const refreshConversations = useCallback(async () => {
+    try {
+      const list = await api.get<ConversationSummary[]>(`/agents/${id}/conversations`);
+      setConversations(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, [id]);
+
+  // İlk yükleme: agent + thread'ler; ?c= varsa o thread'i, yoksa en yeniyi aç
   useEffect(() => {
-    api
-      .get<Agent>(`/agents/${id}`)
-      .then(setAgent)
-      .catch(() => setLoadError("Agent not found."));
+    api.get<Agent>(`/agents/${id}`).then(setAgent).catch(() => setLoadError("Agent not found."));
+    refreshConversations().then((list) => {
+      const wanted = new URLSearchParams(window.location.search).get("c");
+      if (wanted && list.some((c) => c.id === wanted)) void openConversation(wanted);
+      else if (list.length > 0) void openConversation(list[0].id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, hitl]);
 
-  // Son assistant mesajını fonksiyonel olarak güncelle
-  const patchAssistant = useCallback(
-    (fn: (m: ChatMessage) => ChatMessage) => {
-      setMessages((prev) => {
-        const next = [...prev];
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === "assistant") {
-            next[i] = fn(next[i]);
-            break;
-          }
+  async function openConversation(conversationId: string) {
+    setActiveId(conversationId);
+    setMessages([]);
+    try {
+      const detail = await api.get<ConversationDetail>(`/conversations/${conversationId}`);
+      setMessages(detail.messages.map(toChatMessage));
+    } catch {
+      setMessages([]);
+    }
+  }
+
+  function newChat() {
+    setActiveId(null);
+    setMessages([]);
+    setInput("");
+  }
+
+  async function deleteConversation(conversationId: string) {
+    try {
+      await api.delete(`/conversations/${conversationId}`);
+    } catch {
+      /* ignore */
+    }
+    setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+    if (activeId === conversationId) newChat();
+  }
+
+  const patchAssistant = useCallback((fn: (m: ChatMessage) => ChatMessage) => {
+    setMessages((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].role === "assistant") {
+          next[i] = fn(next[i]);
+          break;
         }
-        return next;
-      });
-    },
-    [],
-  );
+      }
+      return next;
+    });
+  }, []);
 
   const handleEvent = useCallback(
     (ev: AgentStreamEvent) => {
@@ -110,7 +193,6 @@ export default function ChatPage() {
             return { ...m, segments: segs };
           });
           break;
-
         case "tool_call_start":
           patchAssistant((m) => ({
             ...m,
@@ -128,24 +210,19 @@ export default function ChatPage() {
             ],
           }));
           break;
-
         case "tool_call_end":
           patchAssistant((m) => {
             const segs = [...m.segments];
             for (let i = segs.length - 1; i >= 0; i--) {
               const s = segs[i];
               if (s.kind === "tool" && s.tool.name === ev.tool_name && s.tool.status === "running") {
-                segs[i] = {
-                  kind: "tool",
-                  tool: { ...s.tool, result: ev.tool_result, status: "done" },
-                };
+                segs[i] = { kind: "tool", tool: { ...s.tool, result: ev.tool_result, status: "done" } };
                 break;
               }
             }
             return { ...m, segments: segs };
           });
           break;
-
         case "hitl_requested":
           if (ev.hitl_request_id) {
             setHitl({
@@ -155,16 +232,13 @@ export default function ChatPage() {
             });
           }
           break;
-
         case "hitl_resolved":
           setHitl(null);
           break;
-
         case "done":
           patchAssistant((m) => ({ ...m, running: false, traceId: ev.trace_id }));
           setRunning(false);
           break;
-
         case "error":
           patchAssistant((m) => ({
             ...m,
@@ -179,6 +253,14 @@ export default function ChatPage() {
     [patchAssistant],
   );
 
+  async function ensureConversation(): Promise<string> {
+    if (activeId) return activeId;
+    const conv = await api.post<ConversationSummary>(`/agents/${id}/conversations`, {});
+    setActiveId(conv.id);
+    setConversations((prev) => [conv, ...prev]);
+    return conv.id;
+  }
+
   async function handleSend(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
@@ -186,6 +268,19 @@ export default function ChatPage() {
 
     setInput("");
     setRunning(true);
+
+    let convId: string;
+    try {
+      convId = await ensureConversation();
+    } catch (err) {
+      setRunning(false);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", segments: [], error: err instanceof ApiError ? err.message : "Could not start chat." },
+      ]);
+      return;
+    }
+
     setMessages((prev) => [
       ...prev,
       { role: "user", segments: [{ kind: "text", text }] },
@@ -193,7 +288,7 @@ export default function ChatPage() {
     ]);
 
     try {
-      await runAgentStream(id, text, handleEvent);
+      await streamConversationMessage(convId, text, handleEvent);
     } catch (err) {
       patchAssistant((m) => ({
         ...m,
@@ -202,19 +297,14 @@ export default function ChatPage() {
       }));
       setRunning(false);
     }
+    void refreshConversations();
   }
 
-  // ── HITL eylemleri ────────────────────────────────────────
-  async function resolveHitl(
-    action: "approve" | "reject",
-    reason?: string,
-  ) {
+  async function resolveHitl(action: "approve" | "reject", reason?: string) {
     if (!hitl) return;
     try {
       await api.post(`/hitl/${hitl.requestId}/${action}`, reason ? { reason } : undefined);
-      // Modal'ı kapatmıyoruz; stream'den gelen hitl_resolved kapatacak.
     } catch (err) {
-      // Çözülmüş/expire — yine de kapat
       if (err instanceof ApiError) setHitl(null);
     }
   }
@@ -225,7 +315,7 @@ export default function ChatPage() {
     try {
       parsed = JSON.parse(argsText);
     } catch {
-      return; // geçersiz JSON — modal içinde uyarı gösterilir
+      return;
     }
     try {
       await api.post(`/hitl/${hitl.requestId}/modify`, { arguments: parsed });
@@ -243,81 +333,111 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      {/* Header */}
-      <div className="border-b border-zinc-900 px-6 py-3">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/agents"
-              className="text-zinc-600 transition-colors hover:text-zinc-300"
-            >
-              <ArrowLeft size={16} />
-            </Link>
-            <div>
-              <p className="text-sm font-medium text-zinc-100">
-                {agent?.name ?? "…"}
-              </p>
-              {agent && (
-                <p className="text-[11px] text-zinc-600">
-                  {agent.provider} · {agent.model}
-                </p>
-              )}
-            </div>
+    <div className="flex flex-1 overflow-hidden">
+      {/* Sohbet kenar çubuğu */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-zinc-900 sm:flex">
+        <div className="flex items-center gap-2 px-3 py-3">
+          <Link href="/agents" className="text-zinc-600 transition-colors hover:text-zinc-300">
+            <ArrowLeft size={15} />
+          </Link>
+          <span className="flex-1 truncate text-xs font-medium text-zinc-300">
+            {agent?.name ?? "…"}
+          </span>
+        </div>
+        <div className="px-3 pb-2">
+          <Button size="sm" variant="outline" className="w-full" onClick={newChat}>
+            <Plus size={13} />
+            Yeni sohbet
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 py-1">
+          {conversations.length === 0 ? (
+            <p className="px-2 py-4 text-center text-[11px] text-zinc-600">Henüz sohbet yok</p>
+          ) : (
+            conversations.map((c) => (
+              <div
+                key={c.id}
+                className={cn(
+                  "group flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors",
+                  activeId === c.id ? "bg-zinc-900 text-zinc-100" : "text-zinc-400 hover:bg-zinc-900/50",
+                )}
+              >
+                <button onClick={() => openConversation(c.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                  <MessageSquare size={12} className="shrink-0 text-zinc-600" />
+                  <span className="flex-1 truncate">{c.title}</span>
+                </button>
+                <span className="shrink-0 text-[10px] text-zinc-700">{relativeTime(c.last_message_at)}</span>
+                <button
+                  onClick={() => deleteConversation(c.id)}
+                  className="shrink-0 text-zinc-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* Sohbet alanı */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b border-zinc-900 px-6 py-3">
+          <div className="flex items-center gap-2">
+            <Bot size={15} className="text-indigo-400" />
+            <span className="text-sm font-medium text-zinc-100">{agent?.name ?? "…"}</span>
+            {agent && <span className="text-[11px] text-zinc-600">{agent.provider} · {agent.model}</span>}
           </div>
           {agent && agent.hitl_tool_names.length > 0 && (
             <Badge variant="amber">
               <ShieldCheck size={10} />
-              HITL enabled
+              Onay gerektiren araçlar
             </Badge>
           )}
         </div>
-      </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-          {messages.length === 0 && (
-            <div className="py-20 text-center">
-              <Bot size={28} className="mx-auto mb-3 text-zinc-700" />
-              <p className="text-sm text-zinc-500">
-                Send a message to run this agent.
-              </p>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+            {messages.length === 0 && (
+              <div className="py-20 text-center">
+                <Bot size={28} className="mx-auto mb-3 text-zinc-700" />
+                <p className="text-sm text-zinc-500">Sohbete başlamak için bir mesaj gönder.</p>
+              </div>
+            )}
+            {messages.map((msg, i) => (
+              <MessageBubble
+                key={i}
+                msg={msg}
+                traceSuffix={`?agent=${id}${activeId ? `&c=${activeId}` : ""}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-zinc-900 px-6 py-4">
+          <form onSubmit={handleSend} className="mx-auto flex w-full max-w-3xl items-end gap-2">
+            <div className="flex-1">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend(e);
+                  }
+                }}
+                placeholder="Mesaj yaz…  (Enter = gönder, Shift+Enter = yeni satır)"
+                rows={1}
+                disabled={running}
+                className="resize-none"
+              />
             </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <MessageBubble key={i} msg={msg} />
-          ))}
+            <Button type="submit" size="lg" disabled={running || !input.trim()}>
+              {running ? <Spinner className="h-4 w-4" /> : <Send size={15} />}
+            </Button>
+          </form>
         </div>
       </div>
 
-      {/* Input */}
-      <div className="border-t border-zinc-900 px-6 py-4">
-        <form onSubmit={handleSend} className="mx-auto flex w-full max-w-3xl items-end gap-2">
-          <div className="flex-1">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend(e);
-                }
-              }}
-              placeholder="Message the agent…  (Enter to send, Shift+Enter for newline)"
-              rows={1}
-              disabled={running}
-              className="resize-none"
-            />
-          </div>
-          <Button type="submit" size="lg" disabled={running || !input.trim()}>
-            {running ? <Spinner className="h-4 w-4" /> : <Send size={15} />}
-          </Button>
-        </form>
-      </div>
-
-      {/* HITL Modal */}
       <HitlModal
         state={hitl}
         onApprove={() => resolveHitl("approve")}
@@ -330,23 +450,13 @@ export default function ChatPage() {
 
 // ── Mesaj baloncuğu ─────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: string }) {
   const isUser = msg.role === "user";
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
-      <div
-        className={cn(
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
-          isUser ? "bg-zinc-800" : "bg-indigo-500/10",
-        )}
-      >
-        {isUser ? (
-          <UserIcon size={14} className="text-zinc-400" />
-        ) : (
-          <Bot size={14} className="text-indigo-400" />
-        )}
+      <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", isUser ? "bg-zinc-800" : "bg-indigo-500/10")}>
+        {isUser ? <UserIcon size={14} className="text-zinc-400" /> : <Bot size={14} className="text-indigo-400" />}
       </div>
-
       <div className={cn("flex max-w-[85%] flex-col gap-2", isUser && "items-end")}>
         {msg.segments.map((seg, i) =>
           seg.kind === "text" ? (
@@ -355,9 +465,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                 key={i}
                 className={cn(
                   "whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
-                  isUser
-                    ? "bg-indigo-600 text-white"
-                    : "bg-zinc-900/70 text-zinc-200",
+                  isUser ? "bg-indigo-600 text-white" : "bg-zinc-900/70 text-zinc-200",
                 )}
               >
                 {seg.text}
@@ -367,23 +475,20 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             <ToolCard key={i} tool={seg.tool} />
           ),
         )}
-
         {msg.running && msg.segments.every((s) => s.kind !== "text" || !s.text) && (
           <div className="flex items-center gap-2 px-1 text-xs text-zinc-600">
             <Spinner className="h-3 w-3" />
-            thinking…
+            düşünüyor…
           </div>
         )}
-
         {msg.error && <Alert variant="error">{msg.error}</Alert>}
-
         {msg.traceId && (
           <Link
-            href={`/traces/${msg.traceId}`}
+            href={`/traces/${msg.traceId}${traceSuffix}`}
             className="flex items-center gap-1 px-1 text-[11px] text-zinc-600 transition-colors hover:text-indigo-400"
           >
             <Activity size={11} />
-            View trace
+            İzi görüntüle
           </Link>
         )}
       </div>
@@ -392,32 +497,32 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 }
 
 function ToolCard({ tool }: { tool: ToolBlock }) {
+  const rows = formatArgs(tool.args);
   return (
     <div className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5 text-xs">
       <div className="flex items-center gap-2">
         <Wrench size={12} className="text-amber-400" />
-        <span className="font-medium text-zinc-300">{tool.name}</span>
-        {tool.status === "running" ? (
-          <Spinner className="h-3 w-3" />
-        ) : (
-          <Badge variant="green">done</Badge>
-        )}
+        <span className="font-medium text-zinc-300">{toolLabel(tool.name)}</span>
+        {tool.status === "running" ? <Spinner className="h-3 w-3" /> : <Badge variant="green">tamam</Badge>}
       </div>
-      {Object.keys(tool.args).length > 0 && (
-        <pre className="mt-1.5 overflow-x-auto rounded bg-zinc-950/60 p-2 text-[11px] text-zinc-500">
-          {JSON.stringify(tool.args, null, 2)}
-        </pre>
+      {rows.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-0.5">
+          {rows.map((r, i) => (
+            <div key={i} className="flex gap-1.5 text-[11px]">
+              <span className="text-zinc-600">{r.label}:</span>
+              <span className="text-zinc-400">{r.value}</span>
+            </div>
+          ))}
+        </div>
       )}
       {tool.result && (
-        <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-[11px] text-zinc-400">
-          {tool.result}
-        </p>
+        <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-[11px] text-zinc-400">{tool.result}</p>
       )}
     </div>
   );
 }
 
-// ── HITL modal ──────────────────────────────────────────────
+// ── HITL modal (düz metin) ──────────────────────────────────
 
 function HitlModal({
   state,
@@ -443,6 +548,7 @@ function HitlModal({
   }, [state]);
 
   if (!state) return null;
+  const rows = formatArgs(state.args);
 
   function wrap(fn: () => void) {
     setBusy(true);
@@ -450,21 +556,32 @@ function HitlModal({
   }
 
   return (
-    <Modal open title="Approval required">
+    <Modal open title="Onayın gerekiyor">
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-2 text-sm text-zinc-300">
-          <ShieldCheck size={15} className="text-amber-400" />
-          The agent wants to call{" "}
-          <span className="font-medium text-zinc-100">{state.toolName}</span>
+        <div className="flex items-start gap-2.5 text-sm text-zinc-300">
+          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-amber-400" />
+          <span>
+            Agent şunu yapmak istiyor:{" "}
+            <span className="font-medium text-zinc-100">{toolLabel(state.toolName)}</span>
+          </span>
         </div>
 
         {mode === "view" ? (
-          <pre className="max-h-48 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-400">
-            {JSON.stringify(state.args, null, 2)}
-          </pre>
+          rows.length > 0 ? (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-sm">
+              {rows.map((r, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="shrink-0 text-zinc-500">{r.label}:</span>
+                  <span className="break-words text-zinc-200">{r.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">Bu işlem ek parametre içermiyor.</p>
+          )
         ) : (
           <Textarea
-            label="Modified arguments (JSON)"
+            label="Parametreleri düzenle (JSON)"
             value={argsText}
             onChange={(e) => setArgsText(e.target.value)}
             rows={6}
@@ -472,26 +589,31 @@ function HitlModal({
           />
         )}
 
+        <p className="text-xs text-zinc-600">
+          Onaylarsan agent bu işlemi yapar; reddedersen durur; düzenlersen değiştirdiğin
+          parametrelerle devam eder.
+        </p>
+
         <div className="flex items-center justify-end gap-2">
           {mode === "view" ? (
             <>
               <Button variant="outline" size="sm" onClick={() => setMode("modify")} disabled={busy}>
-                Modify
+                Düzenle
               </Button>
               <Button variant="danger" size="sm" onClick={() => wrap(() => onReject())} disabled={busy}>
-                Reject
+                Reddet
               </Button>
               <Button size="sm" onClick={() => wrap(onApprove)} disabled={busy}>
-                Approve
+                Onayla
               </Button>
             </>
           ) : (
             <>
               <Button variant="ghost" size="sm" onClick={() => setMode("view")} disabled={busy}>
-                Cancel
+                Geri
               </Button>
               <Button size="sm" onClick={() => wrap(() => onModify(argsText))} disabled={busy}>
-                Approve with changes
+                Değişiklikle onayla
               </Button>
             </>
           )}

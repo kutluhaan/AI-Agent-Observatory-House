@@ -175,7 +175,14 @@ class OllamaProvider(BaseLLMProvider):
 
                     if chunk.get("done"):
                         finish_reason = "tool_calls" if has_tool_calls else "stop"
-                        yield StreamEvent(type="done", finish_reason=finish_reason)
+                        yield StreamEvent(
+                            type="done",
+                            finish_reason=finish_reason,
+                            usage={
+                                "prompt_tokens": chunk.get("prompt_eval_count", 0) or 0,
+                                "completion_tokens": chunk.get("eval_count", 0) or 0,
+                            },
+                        )
 
         except httpx.HTTPStatusError as e:
             yield StreamEvent(type="error", error_message=f"Ollama request failed: {e.response.status_code}")

@@ -169,8 +169,12 @@ class AnthropicProvider(BaseLLMProvider):
 
             async with self._client.messages.stream(**kwargs) as stream:
                 current_tool_call: dict[str, Any] | None = None
+                input_tokens = 0
 
                 async for event in stream:
+                    if event.type == "message_start":
+                        input_tokens = getattr(event.message.usage, "input_tokens", 0) or 0
+
                     if event.type == "content_block_start":
                         if event.content_block.type == "tool_use":
                             current_tool_call = {
@@ -196,7 +200,12 @@ class AnthropicProvider(BaseLLMProvider):
                             normalized = "tool_calls" if stop_reason == "tool_use" else (
                                 "length" if stop_reason == "max_tokens" else "stop"
                             )
-                            yield StreamEvent(type="done", finish_reason=normalized)
+                            output_tokens = getattr(event.usage, "output_tokens", 0) or 0
+                            yield StreamEvent(
+                                type="done",
+                                finish_reason=normalized,
+                                usage={"prompt_tokens": input_tokens, "completion_tokens": output_tokens},
+                            )
 
         except AuthenticationError as e:
             yield StreamEvent(type="error", error_message=str(e))

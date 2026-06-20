@@ -136,6 +136,7 @@ class OpenAIProvider(BaseLLMProvider):
                 "messages": _to_openai_messages(messages),
                 "temperature": temperature,
                 "stream": True,
+                "stream_options": {"include_usage": True},  # final chunk'ta usage gelsin
             }
             if max_tokens:
                 kwargs["max_tokens"] = max_tokens
@@ -147,8 +148,16 @@ class OpenAIProvider(BaseLLMProvider):
             # OpenAI sends tool call arguments across many delta chunks indexed by `index`.
             # Accumulate here; yield complete tool_call events when finish_reason arrives.
             tool_calls_buf: dict[int, dict[str, Any]] = {}
+            usage: dict[str, int] | None = None
+            pending_finish: str | None = None
 
             async for chunk in stream:
+                # usage chunk (choices boş) finish_reason chunk'ından SONRA gelir
+                if getattr(chunk, "usage", None):
+                    usage = {
+                        "prompt_tokens": chunk.usage.prompt_tokens or 0,
+                        "completion_tokens": chunk.usage.completion_tokens or 0,
+                    }
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -172,10 +181,13 @@ class OpenAIProvider(BaseLLMProvider):
                 if finish_reason:
                     for tc_data in tool_calls_buf.values():
                         yield StreamEvent(type="tool_call", tool_call=tc_data)
-                    normalized = "tool_calls" if finish_reason == "tool_calls" else (
+                    pending_finish = "tool_calls" if finish_reason == "tool_calls" else (
                         "length" if finish_reason == "length" else "stop"
                     )
-                    yield StreamEvent(type="done", finish_reason=normalized)
+
+            # done'u stream bitince yay — usage chunk'ı yakaladıktan sonra
+            if pending_finish is not None:
+                yield StreamEvent(type="done", finish_reason=pending_finish, usage=usage)
 
         except AuthenticationError as e:
             yield StreamEvent(type="error", error_message=str(e))

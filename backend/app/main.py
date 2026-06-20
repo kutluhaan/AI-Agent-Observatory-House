@@ -144,6 +144,14 @@ app.include_router(ws_router, prefix="/ws", tags=["ws"])
 from app.api.v1.agents import router as agents_router
 app.include_router(agents_router, prefix="/agents", tags=["agents"])
 
+# Faz 1: Conversations (kalıcı sohbet thread'leri)
+from app.api.v1.conversations import (
+    router as conversations_router,
+    agent_conversations_router,
+)
+app.include_router(agent_conversations_router, prefix="/agents", tags=["conversations"])
+app.include_router(conversations_router, prefix="/conversations", tags=["conversations"])
+
 # M10: HITL router
 from app.api.v1.hitl import router as hitl_router
 app.include_router(hitl_router, prefix="/hitl", tags=["hitl"])

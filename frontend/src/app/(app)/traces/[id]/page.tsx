@@ -73,6 +73,7 @@ export default function TraceDetailPage() {
   const [trace, setTrace] = useState<TraceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [backToChat, setBackToChat] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -81,6 +82,14 @@ export default function TraceDetailPage() {
       .catch(() => setError("Trace not found."))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Chat'ten gelindiyse (?agent=&c=) sohbete geri dönüş linki kur
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const agent = p.get("agent");
+    const c = p.get("c");
+    if (agent) setBackToChat(`/agents/${agent}/chat${c ? `?c=${c}` : ""}`);
+  }, []);
 
   if (loading) {
     return (
@@ -103,11 +112,11 @@ export default function TraceDetailPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10">
       <Link
-        href="/traces"
+        href={backToChat ?? "/traces"}
         className="mb-6 inline-flex items-center gap-1.5 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
       >
         <ArrowLeft size={13} />
-        Traces
+        {backToChat ? "Sohbete dön" : "Traces"}
       </Link>
 
       <div className="mb-6 flex items-center gap-3">

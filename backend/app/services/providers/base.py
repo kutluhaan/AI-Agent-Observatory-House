@@ -52,6 +52,7 @@ class StreamEvent:
     tool_call: dict[str, Any] | None = None
     finish_reason: str | None = None
     error_message: str | None = None
+    usage: dict[str, int] | None = None  # done event'inde token kullanımı (streaming)
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"type": self.type}

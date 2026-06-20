@@ -80,6 +80,7 @@ async def _build_runner(
     db: AsyncSession,
     redis: aioredis.Redis,
     parent_trace_id: str | None = None,
+    history: list | None = None,
 ) -> AgentRunner:
     config = AgentConfig(
         agent_id=agent.id,
@@ -138,6 +139,7 @@ async def _build_runner(
         tool_context=tool_context,
         hitl=hitl,
         ws_manager=ws_manager,
+        history=history,
     )
 
 

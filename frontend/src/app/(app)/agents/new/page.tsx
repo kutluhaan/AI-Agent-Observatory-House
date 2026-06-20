@@ -8,17 +8,22 @@ import { api, ApiError, type Agent, type AgentTool } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
+import { Dropdown } from "@/components/ui/dropdown";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-const PROVIDERS = ["openai", "anthropic", "gemini", "ollama"];
+const PROVIDERS = [
+  { value: "gemini", label: "Google Gemini" },
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "ollama", label: "Ollama (local)" },
+];
 
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o",
-  anthropic: "claude-sonnet-4-5",
-  gemini: "gemini-2.5-flash",
-  ollama: "llama3.1",
+const MODELS_BY_PROVIDER: Record<string, string[]> = {
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro"],
+  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"],
+  anthropic: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5"],
+  ollama: ["llama3.1", "llama3.2", "qwen2.5", "mistral"],
 };
 
 export default function NewAgentPage() {
@@ -26,8 +31,8 @@ export default function NewAgentPage() {
 
   const [name, setName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState("gpt-4o");
+  const [provider, setProvider] = useState("gemini");
+  const [model, setModel] = useState("gemini-2.5-flash");
   const [temperature, setTemperature] = useState(0.7);
   const [tools, setTools] = useState<AgentTool[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -121,26 +126,20 @@ export default function NewAgentPage() {
         />
 
         <div className="grid grid-cols-2 gap-3">
-          <Select
+          <Dropdown
             label="Provider"
             value={provider}
-            onChange={(e) => {
-              setProvider(e.target.value);
-              setModel(DEFAULT_MODELS[e.target.value] ?? "");
+            options={PROVIDERS}
+            onChange={(v) => {
+              setProvider(v);
+              setModel(MODELS_BY_PROVIDER[v]?.[0] ?? "");
             }}
-          >
-            {PROVIDERS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </Select>
-          <Input
+          />
+          <Dropdown
             label="Model"
             value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="gpt-4o"
-            required
+            options={(MODELS_BY_PROVIDER[provider] ?? []).map((m) => ({ value: m, label: m }))}
+            onChange={setModel}
           />
         </div>
 

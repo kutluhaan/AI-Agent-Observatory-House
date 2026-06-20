@@ -194,12 +194,19 @@ class GeminiProvider(BaseLLMProvider):
             config = _build_config(system, temperature, max_tokens, tools)
 
             has_tool_calls = False
+            usage: dict[str, int] | None = None
             stream = await self._client.aio.models.generate_content_stream(
                 model=model,
                 contents=contents,
                 config=config,
             )
             async for chunk in stream:
+                um = getattr(chunk, "usage_metadata", None)
+                if um is not None:
+                    usage = {
+                        "prompt_tokens": getattr(um, "prompt_token_count", 0) or 0,
+                        "completion_tokens": getattr(um, "candidates_token_count", 0) or 0,
+                    }
                 candidate = chunk.candidates[0] if chunk.candidates else None
                 if candidate and candidate.content and candidate.content.parts:
                     for part in candidate.content.parts:
@@ -220,6 +227,7 @@ class GeminiProvider(BaseLLMProvider):
                     yield StreamEvent(
                         type="done",
                         finish_reason=_normalize_finish(candidate.finish_reason, has_tool_calls),
+                        usage=usage,
                     )
         except errors.APIError as exc:
             yield StreamEvent(type="error", error_message=str(exc))

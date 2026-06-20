@@ -64,6 +64,7 @@ class AgentRunner(BaseAgent):
         tool_context: ToolContext | None = None,
         hitl: Any | None = None,         # HITLEngine — Any ile circular import önlenir
         ws_manager: Any | None = None,   # ConnectionManager
+        history: list[Message] | None = None,  # Önceki thread mesajları (çok-turlu hafıza)
     ) -> None:
         super().__init__(config)
         self.provider = provider
@@ -71,6 +72,7 @@ class AgentRunner(BaseAgent):
         self.tool_context = tool_context
         self.hitl = hitl
         self.ws_manager = ws_manager
+        self.history = history or []
 
     # ─── Public API ───────────────────────────────────────
 
@@ -145,6 +147,8 @@ class AgentRunner(BaseAgent):
                         finish_reason = event.finish_reason or "stop"
                         if event.tool_call:
                             accumulated_tool_calls.append(event.tool_call)
+                        if event.usage:
+                            _merge_usage(total_usage, event.usage)
 
                     elif event.type == "error":
                         await self._emit_error("PROVIDER_STREAM_ERROR", event.error_message or "")
@@ -529,5 +533,7 @@ class AgentRunner(BaseAgent):
         messages: list[Message] = []
         if self.config.system_prompt:
             messages.append(Message(role="system", content=self.config.system_prompt))
+        # Çok-turlu hafıza: önceki thread mesajları (user/assistant final metinleri)
+        messages.extend(self.history)
         messages.append(Message(role="user", content=user_input))
         return messages

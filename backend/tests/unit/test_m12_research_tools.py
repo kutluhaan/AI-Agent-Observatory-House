@@ -50,11 +50,13 @@ def test_notes_key_format():
 # ─── web_search ───────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_web_search_no_api_key():
+async def test_web_search_no_api_key(monkeypatch):
+    # research.py get_settings'i kendi isim alanına import ediyor; tek doğru hedef
+    # paylaşılan singleton instance'ın attribute'unu boşa çekmek (env'de key olsa bile).
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "tavily_api_key", "")
     ctx = _ctx()
-    with patch("app.core.config.get_settings") as mock_settings:
-        mock_settings.return_value.tavily_api_key = ""
-        result = await _web_search(ctx, "AI research", 5, "general", None)
+    result = await _web_search(ctx, "AI research", 5, "general", None)
     assert "TAVILY_API_KEY" in result
     assert "error" in result.lower()
 
