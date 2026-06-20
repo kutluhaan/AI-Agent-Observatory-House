@@ -19,7 +19,11 @@ FILE_TOOL_NAMES = [
     "make_directory",
     "search_files",
     "move_file",
+    "remove_folder",
 ]
+
+# Veri kaybına yol açabilen (okuma dışı) tool'lar — varsayılan olarak kullanıcı onayı (HITL) ister
+DESTRUCTIVE_FILE_TOOLS = ["delete_file", "modify_file", "remove_folder"]
 
 
 def _no_fs() -> str:
@@ -163,3 +167,20 @@ def register_file_tools() -> None:
         if ctx.agent_id is None:
             return _no_fs()
         return await file_store.move_file(ctx.agent_id, source, destination)
+
+    @ToolRegistry.register(
+        name="remove_folder",
+        description=(
+            "Delete a folder and EVERYTHING inside it (all sub-folders and files), recursively. "
+            "Destructive — only use when you intend to remove the whole directory tree."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Folder path to remove."}},
+            "required": ["path"],
+        },
+    )
+    async def remove_folder(ctx: ToolContext, path: str) -> str:
+        if ctx.agent_id is None:
+            return _no_fs()
+        return await file_store.remove_folder(ctx.agent_id, path)

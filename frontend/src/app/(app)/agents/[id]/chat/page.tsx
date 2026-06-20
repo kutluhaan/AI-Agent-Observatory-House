@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   ChevronDown,
   BookOpen,
+  Settings2,
 } from "lucide-react";
 import { friendlyError } from "@/lib/errors";
 import {
@@ -42,6 +43,7 @@ import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
+import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
 
 // ── Mesaj modeli ────────────────────────────────────────────
@@ -453,6 +455,15 @@ export default function ChatPage() {
                 Dosyalar
               </Link>
             )}
+            {agent && (
+              <Link
+                href={`/agents/${id}/edit`}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+              >
+                <Settings2 size={12} />
+                Düzenle
+              </Link>
+            )}
             {agent && agent.hitl_tool_names.length > 0 && (
               <Badge variant="amber">
                 <ShieldCheck size={10} />
@@ -534,17 +545,20 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
       <div className={cn("flex max-w-[85%] flex-col gap-2", isUser && "items-end")}>
         {msg.segments.map((seg, i) => {
           if (seg.kind === "text") {
-            return seg.text ? (
+            if (!seg.text) return null;
+            return (
               <div
                 key={i}
                 className={cn(
-                  "whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
-                  isUser ? "bg-indigo-600 text-white" : "bg-zinc-900/70 text-zinc-200",
+                  "rounded-xl px-3.5 py-2.5 text-sm leading-relaxed",
+                  isUser
+                    ? "whitespace-pre-wrap bg-indigo-600 text-white"
+                    : "bg-zinc-900/70 text-zinc-200",
                 )}
               >
-                {seg.text}
+                {isUser ? seg.text : <Markdown>{seg.text}</Markdown>}
               </div>
-            ) : null;
+            );
           }
           const name = seg.tool.name;
           if (name === "think") {

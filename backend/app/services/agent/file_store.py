@@ -154,6 +154,33 @@ async def delete_file(agent_id, path: str) -> str:
     return f"Deleted '{path}'."
 
 
+async def remove_folder(agent_id, path: str) -> str:
+    """Bir klasörü ve TÜM içeriğini (alt klasörler + dosyalar) siler."""
+    try:
+        path = normalize_path(path)
+    except ValueError as e:
+        return f"[remove_folder error: {e}]"
+    async with AsyncSessionLocal() as db:
+        f = await _get(db, agent_id, path)
+        if f is not None and not f.is_dir:
+            return f"[remove_folder error: '{path}' is a file, not a folder — use delete_file]"
+        # Örtük klasörler de desteklenir: 'path/' altındaki tüm girdiler
+        children = (await db.execute(
+            select(AgentFile).where(
+                AgentFile.agent_id == agent_id,
+                AgentFile.path.like(f"{path}/%"),
+            )
+        )).scalars().all()
+        if f is None and not children:
+            return f"[remove_folder error: '{path}' not found]"
+        for c in children:
+            await db.delete(c)
+        if f is not None:
+            await db.delete(f)
+        await db.commit()
+    return f"Removed folder '{path}' and {len(children)} item(s) inside it."
+
+
 async def list_files(agent_id, path: str | None = None) -> str:
     prefix = ""
     if path:

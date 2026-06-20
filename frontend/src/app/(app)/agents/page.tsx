@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bot, Plus, MessageSquare, ShieldCheck, FolderTree, Trash2 } from "lucide-react";
+import { Bot, Plus, MessageSquare, ShieldCheck, FolderTree, Trash2, Pencil } from "lucide-react";
 import { api, ApiError, type Agent } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -97,6 +97,16 @@ export default function AgentsPage() {
                       HITL
                     </Badge>
                   )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/agents/${agent.id}/edit`);
+                    }}
+                    title="Düzenle"
+                    className="rounded-md p-1 text-zinc-600 opacity-0 transition-all hover:bg-zinc-800 hover:text-zinc-200 group-hover:opacity-100"
+                  >
+                    <Pencil size={13} />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

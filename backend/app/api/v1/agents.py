@@ -45,7 +45,7 @@ from app.services.agent.base import (
 )
 from app.services.agent.registry import ToolContext, ToolRegistry
 from app.services.agent.runner import AgentRunner
-from app.services.agent.tools.files import FILE_TOOL_NAMES
+from app.services.agent.tools.files import DESTRUCTIVE_FILE_TOOLS, FILE_TOOL_NAMES
 from app.services.agent.tools.skills import SKILL_TOOL_NAMES
 from app.services.agent import file_store, knowledge_store
 from app.services.hitl import get_hitl_engine
@@ -56,6 +56,14 @@ from app.ws.traces import manager as ws_manager
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+# Tüm agent yanıtları Markdown formatında — UI bunu zengin biçimde render eder
+_MARKDOWN_INSTRUCTION = (
+    "Format every response using GitHub-Flavored Markdown: use headings, **bold**, "
+    "*italics*, bullet/numbered lists, tables, `inline code`, fenced code blocks with a "
+    "language tag, blockquotes and links where they make the answer clearer. When you write "
+    "files, write their content in Markdown too. Keep the structure clean and readable."
+)
 
 
 # ─── Helpers ──────────────────────────────────────────────
@@ -85,13 +93,18 @@ async def _build_runner(
     parent_trace_id: str | None = None,
     history: list | None = None,
 ) -> AgentRunner:
-    # Dosya sistemi açıksa file tool'ları otomatik eklenir (DB'de saklanmaz)
     effective_tools = list(agent.tool_names or [])
-    if agent.file_system_enabled:
-        effective_tools += FILE_TOOL_NAMES
 
     # ask_user kullanıcıya doğrudan soru sorar — onay (HITL) gerektirmez
     hitl_names = [n for n in (agent.hitl_tool_names or []) if n != "ask_user"]
+
+    # Dosya sistemi açıksa file tool'ları otomatik eklenir (DB'de saklanmaz).
+    # Yıkıcı dosya tool'ları (sil/düzenle/klasör-sil) varsayılan olarak onaydan geçer.
+    if agent.file_system_enabled:
+        effective_tools += FILE_TOOL_NAMES
+        for t in DESTRUCTIVE_FILE_TOOLS:
+            if t not in hitl_names:
+                hitl_names.append(t)
 
     # Faz 4: bilgi öğeleri — kurallar/anayasa system prompt'a, skill'ler tool ile
     system_prompt = agent.system_prompt
@@ -104,6 +117,9 @@ async def _build_runner(
             "\n\nYou have skills available. Call list_skills to discover them and "
             "read_skill to read one before a task it covers."
         )
+
+    # Tüm yanıtlar Markdown — UI zengin biçimde gösterir
+    system_prompt = f"{system_prompt}\n\n{_MARKDOWN_INSTRUCTION}"
 
     config = AgentConfig(
         agent_id=agent.id,

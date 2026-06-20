@@ -102,6 +102,14 @@ async def test_file_store_roundtrip_and_explorer(client):
     await file_store.delete_file(aid, "notes/b.md")
     assert "not found" in await file_store.read_file(aid, "notes/b.md")
 
+    # remove_folder: klasör + içindekiler özyinelemeli silinir
+    await file_store.write_file(aid, oid, "tmp/x.txt", "a")
+    await file_store.write_file(aid, oid, "tmp/sub/y.txt", "b")
+    out = await file_store.remove_folder(aid, "tmp")
+    assert "Removed folder" in out
+    assert "not found" in await file_store.read_file(aid, "tmp/x.txt")
+    assert "not found" in await file_store.read_file(aid, "tmp/sub/y.txt")
+
     # Dosya gezgini endpoint'leri
     await file_store.write_file(aid, oid, "report.txt", "final report")
     files = assert_success((await client.get(f"/agents/{aid}/files")).json())

@@ -12,11 +12,18 @@ import {
   Download,
   ChevronRight,
   ChevronDown,
+  Eye,
+  Code2,
 } from "lucide-react";
 import { api, type Agent, type AgentFile } from "@/lib/api";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
+
+function isMarkdownPath(path: string): boolean {
+  return /\.(md|markdown|mdx)$/i.test(path);
+}
 
 interface TreeNode {
   name: string;
@@ -76,6 +83,7 @@ export default function AgentFilesPage() {
   const [error, setError] = useState("");
   const [openFile, setOpenFile] = useState<{ path: string; content: string } | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
+  const [rawView, setRawView] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -93,6 +101,7 @@ export default function AgentFilesPage() {
 
   async function openPath(path: string) {
     setViewerLoading(true);
+    setRawView(false);
     try {
       const f = await api.get<{ path: string; content: string }>(
         `/agents/${id}/files/content?path=${encodeURIComponent(path)}`,
@@ -180,17 +189,39 @@ export default function AgentFilesPage() {
             <div className="flex h-full flex-col">
               <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2.5">
                 <span className="truncate font-mono text-xs text-zinc-300">{openFile.path}</span>
-                <button
-                  onClick={download}
-                  className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
-                >
-                  <Download size={11} />
-                  İndir
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {isMarkdownPath(openFile.path) && (
+                    <button
+                      onClick={() => setRawView((r) => !r)}
+                      className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+                      title={rawView ? "Önizleme" : "Ham metin"}
+                    >
+                      {rawView ? <Eye size={11} /> : <Code2 size={11} />}
+                      {rawView ? "Önizleme" : "Ham"}
+                    </button>
+                  )}
+                  <button
+                    onClick={download}
+                    className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+                  >
+                    <Download size={11} />
+                    İndir
+                  </button>
+                </div>
               </div>
-              <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 text-xs text-zinc-300">
-                {openFile.content || "(boş dosya)"}
-              </pre>
+              {isMarkdownPath(openFile.path) && !rawView ? (
+                <div className="flex-1 overflow-auto p-4">
+                  {openFile.content ? (
+                    <Markdown>{openFile.content}</Markdown>
+                  ) : (
+                    <span className="text-xs text-zinc-600">(boş dosya)</span>
+                  )}
+                </div>
+              ) : (
+                <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 text-xs text-zinc-300">
+                  {openFile.content || "(boş dosya)"}
+                </pre>
+              )}
             </div>
           ) : (
             <div className="flex h-full items-center justify-center py-16 text-xs text-zinc-600">
