@@ -3,16 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Activity, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Activity, CheckCircle2, XCircle, Wrench, AlertTriangle } from "lucide-react";
 import {
   api,
   type TestRunDetail,
   type TestCaseResult,
+  type TrajectoryStep,
 } from "@/lib/api";
 import { subscribeTestRuns } from "@/lib/ws";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge, statusVariant } from "@/components/ui/badge";
+import { toolLabel, formatArgs } from "@/lib/tools";
+import { cn } from "@/lib/utils";
+
+function fmtCost(c: number | null | undefined): string | null {
+  if (c == null) return null;
+  if (c === 0) return "$0";
+  if (c < 0.01) return `$${c.toFixed(5)}`;
+  return `$${c.toFixed(4)}`;
+}
 
 function isLive(status: string | undefined): boolean {
   return status === "pending" || status === "running";
@@ -117,12 +127,17 @@ export default function TestRunDetailPage() {
         />
       </div>
 
-      {s && (s.avg_latency_ms != null || s.total_tokens != null) && (
-        <div className="mb-8 flex gap-4 text-xs text-zinc-500">
+      {s && (s.avg_latency_ms != null || s.total_tokens != null || s.total_cost_usd != null) && (
+        <div className="mb-8 flex flex-wrap gap-4 text-xs text-zinc-500">
           {s.avg_latency_ms != null && (
             <span>Avg latency: {(s.avg_latency_ms / 1000).toFixed(2)}s</span>
           )}
-          {s.total_tokens != null && <span>Total tokens: {s.total_tokens}</span>}
+          {s.total_tokens != null && <span>Total tokens: {s.total_tokens.toLocaleString()}</span>}
+          {s.total_cost_usd != null && (
+            <span>
+              Est. cost: <span className="text-zinc-300">{fmtCost(s.total_cost_usd)}</span>
+            </span>
+          )}
         </div>
       )}
 
@@ -183,11 +198,12 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
         <span className="flex-1 truncate text-sm text-zinc-200">
           {totalCount > 0 ? `${passedCount}/${totalCount} assertions` : cr.status}
         </span>
-        {cr.latency_ms != null && (
-          <span className="text-[11px] text-zinc-600">
-            {(cr.latency_ms / 1000).toFixed(2)}s
-          </span>
-        )}
+        <span className="flex shrink-0 items-center gap-2.5 text-[11px] text-zinc-600">
+          {cr.steps_taken != null && <span>{cr.steps_taken} adım</span>}
+          {cr.total_tokens != null && <span>{cr.total_tokens.toLocaleString()} tok</span>}
+          {fmtCost(cr.cost_usd) && <span>{fmtCost(cr.cost_usd)}</span>}
+          {cr.latency_ms != null && <span>{(cr.latency_ms / 1000).toFixed(2)}s</span>}
+        </span>
       </button>
 
       {open && (
@@ -209,6 +225,15 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
                   {a.detail && <span className="text-zinc-600">— {a.detail}</span>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {cr.trajectory && cr.trajectory.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-[11px] uppercase tracking-wide text-zinc-600">
+                Trajectory — agent ne yaptı ({cr.trajectory.length} adım)
+              </p>
+              <TrajectoryView steps={cr.trajectory} />
             </div>
           )}
 
@@ -244,5 +269,50 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Trajectory: agent'ın test sırasında attığı adımlar ──────
+
+function TrajectoryView({ steps }: { steps: TrajectoryStep[] }) {
+  return (
+    <ol className="flex flex-col gap-1.5">
+      {steps.map((step, i) => (
+        <TrajectoryRow key={i} index={i} step={step} />
+      ))}
+    </ol>
+  );
+}
+
+function TrajectoryRow({ index, step }: { index: number; step: TrajectoryStep }) {
+  const [open, setOpen] = useState(false);
+  const args = formatArgs(step.arguments)
+    .map((r) => `${r.label}: ${r.value}`)
+    .join("  ·  ");
+  return (
+    <li
+      className={cn(
+        "rounded-lg border px-2.5 py-2",
+        step.ok ? "border-zinc-800 bg-zinc-950/40" : "border-red-500/25 bg-red-500/5",
+      )}
+    >
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-zinc-800 text-[9px] text-zinc-400">
+          {index + 1}
+        </span>
+        {step.ok ? (
+          <Wrench size={11} className="shrink-0 text-amber-400" />
+        ) : (
+          <AlertTriangle size={11} className="shrink-0 text-red-400" />
+        )}
+        <span className="shrink-0 font-medium text-zinc-300">{toolLabel(step.name)}</span>
+        {args && <span className="truncate text-zinc-600">{args}</span>}
+      </button>
+      {open && (
+        <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-zinc-950/60 p-2 text-[11px] text-zinc-400">
+          {step.result || "(boş sonuç)"}
+        </pre>
+      )}
+    </li>
   );
 }

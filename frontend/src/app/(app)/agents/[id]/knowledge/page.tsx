@@ -14,7 +14,9 @@ import {
   MessageSquareText,
   Sparkles,
   Power,
+  ChevronRight,
 } from "lucide-react";
+import { Markdown } from "@/components/ui/markdown";
 import {
   api,
   ApiError,
@@ -45,12 +47,29 @@ const KIND_META: Record<
 
 const KIND_ORDER: KnowledgeKind[] = ["constitution", "rule", "instruction", "prompt", "skill"];
 
+/** İçerik markdown sözdizimi içeriyor mu? (başlık, kalın, liste, kod, link, alıntı, tablo) */
+function looksLikeMarkdown(text: string): boolean {
+  return /(^|\n)#{1,6}\s|\*\*[^*]+\*\*|(^|\n)\s*[-*+]\s|(^|\n)\s*\d+\.\s|```|\[[^\]]+\]\([^)]+\)|(^|\n)>\s|(^|\n)\|.*\|/.test(
+    text,
+  );
+}
+
 export default function AgentKnowledgePage() {
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [items, setItems] = useState<AgentKnowledge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggleExpand(itemId: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
 
   // Form / modal
   const [open, setOpen] = useState(false);
@@ -205,52 +224,83 @@ export default function AgentKnowledgePage() {
                   </Badge>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {group.map((item) => (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "group rounded-lg border px-3.5 py-3 transition-colors",
-                        item.is_active
-                          ? "border-zinc-800/80 bg-zinc-900/40"
-                          : "border-zinc-800/50 bg-zinc-900/20 opacity-60",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-zinc-100">{item.name}</p>
-                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-zinc-500">
-                            {item.content}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  {group.map((item) => {
+                    const isOpen = expanded.has(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "group rounded-lg border transition-colors",
+                          item.is_active
+                            ? "border-zinc-800/80 bg-zinc-900/40"
+                            : "border-zinc-800/50 bg-zinc-900/20 opacity-60",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
                           <button
-                            onClick={() => toggleActive(item)}
-                            title={item.is_active ? "Devre dışı bırak" : "Etkinleştir"}
+                            onClick={() => toggleExpand(item.id)}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          >
+                            <ChevronRight
+                              size={14}
+                              className={cn(
+                                "shrink-0 text-zinc-600 transition-transform",
+                                isOpen && "rotate-90 text-zinc-400",
+                              )}
+                            />
+                            <span className="truncate text-sm font-medium text-zinc-100">{item.name}</span>
+                            {!isOpen && (
+                              <span className="truncate text-xs text-zinc-600">
+                                {item.content.replace(/\s+/g, " ").slice(0, 60)}
+                              </span>
+                            )}
+                          </button>
+                          <div
                             className={cn(
-                              "rounded-md p-1.5 transition-colors hover:bg-zinc-800",
-                              item.is_active ? "text-emerald-400" : "text-zinc-600",
+                              "flex shrink-0 items-center gap-0.5 transition-opacity",
+                              isOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                             )}
                           >
-                            <Power size={13} />
-                          </button>
-                          <button
-                            onClick={() => openEdit(item)}
-                            title="Düzenle"
-                            className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            onClick={() => remove(item)}
-                            title="Sil"
-                            className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                            <button
+                              onClick={() => toggleActive(item)}
+                              title={item.is_active ? "Devre dışı bırak" : "Etkinleştir"}
+                              className={cn(
+                                "rounded-md p-1.5 transition-colors hover:bg-zinc-800",
+                                item.is_active ? "text-emerald-400" : "text-zinc-600",
+                              )}
+                            >
+                              <Power size={13} />
+                            </button>
+                            <button
+                              onClick={() => openEdit(item)}
+                              title="Düzenle"
+                              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              onClick={() => remove(item)}
+                              title="Sil"
+                              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </div>
+                        {isOpen && (
+                          <div className="border-t border-zinc-800/60 px-3.5 py-3">
+                            {looksLikeMarkdown(item.content) ? (
+                              <Markdown>{item.content}</Markdown>
+                            ) : (
+                              <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+                                {item.content}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );

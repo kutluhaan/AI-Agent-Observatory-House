@@ -49,7 +49,29 @@ router = APIRouter()
 # /agents/{agent_id}/conversations — thread listesi/oluşturma
 agent_conversations_router = APIRouter()
 
-_HISTORY_LIMIT = 40  # token kontrolü için hafızaya beslenecek son mesaj sayısı
+# Hafıza bütçesi: geçmiş, mesaj sayısı yerine yaklaşık token bütçesiyle sınırlanır.
+# En yeni mesajlardan başlayıp bütçe dolana kadar geriye doğru toplanır — uzun
+# sohbetlerde her istekte tüm geçmişin yeniden gönderilmesini (token yakımını) önler.
+_HISTORY_MAX_MESSAGES = 30
+_HISTORY_CHAR_BUDGET = 24000  # ~6000 token
+
+
+def _select_history(existing: list) -> list:
+    """En yeni mesajlardan bütçeye sığacak kadarını (kronolojik sırada) döner."""
+    selected: list[Message] = []
+    total = 0
+    for m in reversed(existing):
+        if not m.content:
+            continue
+        if selected and (
+            total + len(m.content) > _HISTORY_CHAR_BUDGET
+            or len(selected) >= _HISTORY_MAX_MESSAGES
+        ):
+            break
+        total += len(m.content)
+        selected.append(Message(role=m.role, content=m.content))
+    selected.reverse()
+    return selected
 
 
 # ─── Helpers ──────────────────────────────────────────────
@@ -254,11 +276,7 @@ async def post_message(
         .order_by(ConversationMessage.seq, ConversationMessage.created_at)
     )).scalars().all()
 
-    history = [
-        Message(role=m.role, content=m.content)
-        for m in existing[-_HISTORY_LIMIT:]
-        if m.content
-    ]
+    history = _select_history(existing)
     is_first = len(existing) == 0
     user_seq = len(existing)
 

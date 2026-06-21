@@ -10,17 +10,38 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert } from "@/components/ui/alert";
 
-const EXAMPLE_YAML = `name: echo-suite
-description: Basic checks for the echo agent
+const EXAMPLE_YAML = `name: research-suite
+description: Checks for a file-system research agent
 agent_id: "<agent-uuid>"
 cases:
-  - name: greets-back
-    input: "Hello"
+  - name: researches-and-saves
+    input: "Research burotime and save findings to research/burotime.md"
     assertions:
+      # Çıktı (deterministik)
       - type: response_contains
-        value: "hello"
+        value: "burotime"
+      - type: response_not_contains
+        value: "I cannot"
+      # - type: response_regex
+      #   value: "\\\\bsource(s)?\\\\b"
+      # Trajectory / tool kullanımı
+      - type: tools_used
+        value: ["web_search", "write_file"]
+      - type: tool_sequence            # bu sırayla (aralarında başka adım olabilir)
+        value: ["web_search", "write_file"]
+      - type: tool_called_with_args
+        value: { name: "write_file", args: { path: "research/burotime.md" } }
+      - type: no_tool_errors
+        value: true
+      # Operasyonel bütçeler
+      - type: steps_under
+        value: 8
+      - type: tokens_under
+        value: 40000
+      - type: cost_under
+        value: 0.05
       - type: latency_under
-        value: 10000
+        value: 60000
 `;
 
 export default function NewTestSuitePage() {
@@ -82,7 +103,7 @@ export default function NewTestSuitePage() {
           onChange={(e) => setConfigYaml(e.target.value)}
           rows={14}
           className="font-mono text-xs"
-          hint="Set agent_id to a real agent. Assertions: response_contains, tool_called, latency_under."
+          hint="agent_id'yi gerçek bir agent'a ayarla. Assertion'lar — çıktı: response_contains/not_contains/equals/regex · tool: tool_called/tool_called_with_args/tool_sequence/tools_used/no_tool_errors · bütçe: steps_under/tokens_under/cost_under/latency_under/finish_reason_is."
           required
         />
 

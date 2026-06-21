@@ -382,7 +382,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex h-[calc(100dvh-3rem)] overflow-hidden">
       {/* Sohbet kenar çubuğu */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-zinc-900 sm:flex">
         <div className="flex items-center gap-2 px-3 py-3">

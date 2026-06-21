@@ -42,11 +42,23 @@ import yaml
 
 
 SUPPORTED_ASSERTION_TYPES = {
+    # Çıktı (deterministik)
     "response_contains",
+    "response_not_contains",
+    "response_equals",
+    "response_regex",
+    # Trajectory / tool (deterministik)
     "tool_called",
+    "tool_called_with_args",
+    "tool_sequence",
+    "tools_used",
+    "no_tool_errors",
+    # Operasyonel (deterministik)
     "latency_under",
     "finish_reason_is",
     "steps_under",
+    "tokens_under",
+    "cost_under",
 }
 
 

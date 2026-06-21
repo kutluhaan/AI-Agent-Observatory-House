@@ -72,6 +72,17 @@ def _split_system_and_messages(messages: list[Message]) -> tuple[str, list[dict[
     return system, chat_messages
 
 
+def _cached_system(system: str) -> list[dict[str, Any]]:
+    """System prompt'u ephemeral cache'li tek text bloğa çevirir.
+
+    Render sırası tools → system olduğundan system bloğundaki cache_control,
+    tools + system'i birlikte cache'ler. ReAct döngüsünde her adım aynı
+    prefix'i yeniden gönderir; cache okuması ~0.1× maliyetle gelir. Prefix
+    minimumun altındaysa sessizce cache'lenmez (hata değil).
+    """
+    return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+
+
 def _to_anthropic_tools(tools: list[ToolDefinition]) -> list[dict[str, Any]]:
     return [
         {
@@ -107,7 +118,7 @@ class AnthropicProvider(BaseLLMProvider):
                 "max_tokens": max_tokens or 4096,
             }
             if system:
-                kwargs["system"] = system
+                kwargs["system"] = _cached_system(system)
             if tools:
                 kwargs["tools"] = _to_anthropic_tools(tools)
 
@@ -163,7 +174,7 @@ class AnthropicProvider(BaseLLMProvider):
                 "max_tokens": max_tokens or 4096,
             }
             if system:
-                kwargs["system"] = system
+                kwargs["system"] = _cached_system(system)
             if tools:
                 kwargs["tools"] = _to_anthropic_tools(tools)
 

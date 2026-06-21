@@ -42,6 +42,25 @@ from app.services.trace_collector import Tracer
 
 logger = structlog.get_logger()
 
+# Token optimizasyonu: tool sonuçları LLM geçmişine eklenirken kırpılır.
+# ReAct döngüsünde her adım tüm geçmişi yeniden gönderir; kırpılmamış büyük
+# web_search/read_file sonuçları her adımda yeniden faturalanır. UI/trace'e
+# tam sonuç gider, sadece LLM'e beslenen kopya kırpılır.
+MAX_TOOL_RESULT_CHARS = 8000
+
+
+def _truncate_for_context(text: str) -> str:
+    if text is None:
+        return ""
+    if len(text) <= MAX_TOOL_RESULT_CHARS:
+        return text
+    dropped = len(text) - MAX_TOOL_RESULT_CHARS
+    return (
+        text[:MAX_TOOL_RESULT_CHARS]
+        + f"\n\n…[{dropped} characters truncated to save tokens. "
+        "If you need more, use a more specific query, path, or range.]"
+    )
+
 
 def _merge_usage(total: dict[str, int], delta: dict[str, int]) -> None:
     for k, v in delta.items():
@@ -323,7 +342,7 @@ class AgentRunner(BaseAgent):
 
                         messages.append(Message(
                             role="tool",
-                            content=tool_result,
+                            content=_truncate_for_context(tool_result),
                             tool_call_id=call_id,
                         ))
                     continue
@@ -470,7 +489,7 @@ class AgentRunner(BaseAgent):
                     })
                     messages.append(Message(
                         role="tool",
-                        content=tool_result,
+                        content=_truncate_for_context(tool_result),
                         tool_call_id=call_id,
                     ))
                 continue

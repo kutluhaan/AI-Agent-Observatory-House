@@ -224,6 +224,7 @@ def _compute_summary(results: list[TestCaseResult]) -> dict:
     errored = sum(1 for r in results if r.status == "error")
     latencies = [r.latency_ms for r in results if r.latency_ms is not None]
     tokens = [r.total_tokens for r in results if r.total_tokens is not None]
+    costs = [r.cost_usd for r in results if r.cost_usd is not None]
     return {
         "total": total,
         "passed": passed,
@@ -232,4 +233,5 @@ def _compute_summary(results: list[TestCaseResult]) -> dict:
         "pass_rate": round(passed / total, 4) if total else 0.0,
         "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
         "total_tokens": sum(tokens) if tokens else None,
+        "total_cost_usd": round(sum(costs), 6) if costs else None,
     }

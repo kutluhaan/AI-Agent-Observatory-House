@@ -88,6 +88,8 @@ class TestCaseResultResponse(BaseModel):
     total_tokens: int | None
     assertions_results: list[dict[str, Any]]
     rag_metrics: dict[str, Any] | None
+    trajectory: list[dict[str, Any]] | None
+    cost_usd: float | None
     error_message: str | None
     created_at: str
 
@@ -104,6 +106,8 @@ class TestCaseResultResponse(BaseModel):
             total_tokens=obj.total_tokens,
             assertions_results=obj.assertions_results or [],
             rag_metrics=obj.rag_metrics,
+            trajectory=obj.trajectory,
+            cost_usd=obj.cost_usd,
             error_message=obj.error_message,
             created_at=obj.created_at.isoformat(),
         )

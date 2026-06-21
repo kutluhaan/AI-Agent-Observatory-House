@@ -17,6 +17,7 @@ Kullanım:
 """
 from __future__ import annotations
 
+import json as _json
 import time
 import uuid
 from typing import Any
@@ -96,10 +97,17 @@ class AgentSandbox:
         agent_result: AgentResult = await runner.run(user_input)
         latency_ms = int((time.monotonic() - start) * 1000)
 
+        from app.services.pricing import estimate_cost
+        cost_usd = estimate_cost(
+            self.config.provider, self.config.model, agent_result.total_usage
+        )
+
         return SandboxResult(
             agent_result=agent_result,
             latency_ms=latency_ms,
             tools_called=runner.tools_called,
+            trajectory=runner.trajectory,
+            cost_usd=cost_usd,
         )
 
 
@@ -112,6 +120,7 @@ class _InstrumentedRunner(AgentRunner):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.tools_called: list[str] = []
+        self.trajectory: list[dict] = []
         self._history_prefix: list[Message] = []
 
     def _inject_history(self, role: str, content: str) -> None:
@@ -137,4 +146,24 @@ class _InstrumentedRunner(AgentRunner):
     async def _execute_tool(self, tool_name: str, arguments: dict) -> str:
         result = await super()._execute_tool(tool_name, arguments)
         self.tools_called.append(tool_name)
+
+        # Argümanları depolama için dict'e normalize et (OpenAI JSON string dönebilir)
+        args = arguments
+        if isinstance(args, str):
+            try:
+                args = _json.loads(args)
+            except Exception:
+                args = {"_raw": args}
+
+        # Hata sezgisi: "[... error ...]" ile başlayan sonuçlar başarısız sayılır
+        result_str = result if isinstance(result, str) else str(result)
+        stripped = result_str.lstrip()
+        ok = not (stripped.startswith("[") and "error" in stripped[:80].lower())
+
+        self.trajectory.append({
+            "name": tool_name,
+            "arguments": args if isinstance(args, dict) else {"value": args},
+            "result": result_str[:4000],
+            "ok": ok,
+        })
         return result

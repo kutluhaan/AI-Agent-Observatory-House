@@ -149,6 +149,8 @@ async def run_case(
         total_tokens=total_tokens,
         assertions_results=[r.to_dict() for r in assertion_results],
         rag_metrics=rag_metrics,
+        trajectory=sandbox_result.trajectory,
+        cost_usd=sandbox_result.cost_usd,
     )
 
 
@@ -165,6 +167,8 @@ async def _save_result(
     total_tokens: int | None = None,
     assertions_results: list | None = None,
     rag_metrics: dict | None = None,
+    trajectory: list | None = None,
+    cost_usd: float | None = None,
     error_message: str | None = None,
 ) -> TestCaseResult:
     result = TestCaseResult(
@@ -179,6 +183,8 @@ async def _save_result(
         total_tokens=total_tokens,
         assertions_results=assertions_results or [],
         rag_metrics=rag_metrics,
+        trajectory=trajectory,
+        cost_usd=cost_usd,
         error_message=error_message,
         created_at=datetime.now(UTC),
     )

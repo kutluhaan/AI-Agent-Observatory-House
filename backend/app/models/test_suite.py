@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -187,6 +188,10 @@ class TestCaseResult(Base):
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     assertions_results: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     rag_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Adım-adım trajectory: [{name, arguments, result, ok}] — agent'ın test sırasında ne yaptığı
+    trajectory: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Token kullanımından yaklaşık USD maliyet
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
