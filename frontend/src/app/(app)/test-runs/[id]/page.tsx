@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Activity, CheckCircle2, XCircle, Wrench, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Activity, CheckCircle2, XCircle, Wrench, AlertTriangle, Gavel } from "lucide-react";
 import {
   api,
   type TestRunDetail,
   type TestCaseResult,
   type TrajectoryStep,
+  type JudgeResult,
+  type ConsistencyInfo,
 } from "@/lib/api";
 import { subscribeTestRuns } from "@/lib/ws";
 import { Alert } from "@/components/ui/alert";
@@ -23,6 +25,16 @@ function fmtCost(c: number | null | undefined): string | null {
   if (c < 0.01) return `$${c.toFixed(5)}`;
   return `$${c.toFixed(4)}`;
 }
+
+const JUDGE_LABELS: Record<string, string> = {
+  task_completion: "Görev tamamlama",
+  answer_correctness: "Cevap doğruluğu",
+  rubric: "Rubrik",
+  step_efficiency: "Adım verimliliği",
+  argument_correctness: "Argüman doğruluğu",
+  reasoning_quality: "Akıl yürütme",
+  safety: "Güvenlik",
+};
 
 function isLive(status: string | undefined): boolean {
   return status === "pending" || status === "running";
@@ -138,6 +150,11 @@ export default function TestRunDetailPage() {
               Est. cost: <span className="text-zinc-300">{fmtCost(s.total_cost_usd)}</span>
             </span>
           )}
+          {s.avg_judge_score != null && (
+            <span>
+              Avg judge: <span className="text-zinc-300">{Math.round(s.avg_judge_score * 100)}%</span>
+            </span>
+          )}
         </div>
       )}
 
@@ -199,6 +216,19 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
           {totalCount > 0 ? `${passedCount}/${totalCount} assertions` : cr.status}
         </span>
         <span className="flex shrink-0 items-center gap-2.5 text-[11px] text-zinc-600">
+          {cr.consistency && (
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.5 tabular-nums",
+                cr.consistency.passed_runs === cr.consistency.runs
+                  ? "bg-green-500/10 text-green-400"
+                  : "bg-amber-500/10 text-amber-400",
+              )}
+              title="Tutarlılık: geçen / toplam tekrar"
+            >
+              {cr.consistency.passed_runs}/{cr.consistency.runs}×
+            </span>
+          )}
           {cr.steps_taken != null && <span>{cr.steps_taken} adım</span>}
           {cr.total_tokens != null && <span>{cr.total_tokens.toLocaleString()} tok</span>}
           {fmtCost(cr.cost_usd) && <span>{fmtCost(cr.cost_usd)}</span>}
@@ -225,6 +255,28 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
                   {a.detail && <span className="text-zinc-600">— {a.detail}</span>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {cr.consistency && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-[11px] uppercase tracking-wide text-zinc-600">
+                Tutarlılık — {cr.consistency.runs}× çalıştırıldı
+              </p>
+              <ConsistencyView c={cr.consistency} />
+            </div>
+          )}
+
+          {cr.judge_results && cr.judge_results.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-[11px] uppercase tracking-wide text-zinc-600">
+                LLM-as-judge metrikleri
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {cr.judge_results.map((j, i) => (
+                  <JudgeView key={i} judge={j} />
+                ))}
+              </div>
             </div>
           )}
 
@@ -314,5 +366,80 @@ function TrajectoryRow({ index, step }: { index: number; step: TrajectoryStep })
         </pre>
       )}
     </li>
+  );
+}
+
+// ── LLM-as-judge metrik kartı ───────────────────────────────
+
+function JudgeView({ judge }: { judge: JudgeResult }) {
+  const label = JUDGE_LABELS[judge.type] ?? judge.type;
+  const isError = judge.score == null;
+  const pct = judge.score != null ? Math.round(judge.score * 100) : 0;
+  const passed = judge.passed === true;
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-2.5 py-2 text-zinc-300">
+      <div className="flex items-center gap-2">
+        <Gavel size={11} className="shrink-0 text-indigo-400" />
+        <span className="font-medium">{judge.name ?? label}</span>
+        {isError ? (
+          <span className="ml-auto text-[11px] text-amber-400">judge hatası</span>
+        ) : (
+          <span className="ml-auto flex items-center gap-1.5">
+            <span className={cn("tabular-nums", passed ? "text-green-400" : "text-red-400")}>{pct}%</span>
+            {passed ? (
+              <CheckCircle2 size={12} className="text-green-400" />
+            ) : (
+              <XCircle size={12} className="text-red-400" />
+            )}
+          </span>
+        )}
+      </div>
+      {!isError && (
+        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className={cn("h-full rounded-full", passed ? "bg-green-500/70" : "bg-red-500/70")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+      {(judge.rationale || judge.error) && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">
+          {judge.rationale || judge.error}
+          {!isError && (
+            <span className="text-zinc-700"> · eşik {Math.round(judge.threshold * 100)}%</span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Tutarlılık: N tekrarın geçme oranı + tekrar tekrar nokta görünümü ──
+
+function ConsistencyView({ c }: { c: ConsistencyInfo }) {
+  const rate = Math.round(c.pass_rate * 100);
+  const ok = c.pass_rate >= c.min_pass_rate;
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-2.5 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn("font-medium tabular-nums", ok ? "text-green-400" : "text-red-400")}>
+          {c.passed_runs}/{c.runs} geçti · %{rate}
+        </span>
+        <span className="text-zinc-700">eşik %{Math.round(c.min_pass_rate * 100)}</span>
+        {c.errored_runs ? <span className="text-amber-400">{c.errored_runs} hata</span> : null}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {c.runs_detail.map((r, i) => (
+          <span
+            key={i}
+            title={r.errored ? "hata" : r.passed ? "geçti" : "kaldı"}
+            className={cn(
+              "h-4 w-4 rounded-sm",
+              r.errored ? "bg-amber-500/40" : r.passed ? "bg-green-500/60" : "bg-red-500/60",
+            )}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

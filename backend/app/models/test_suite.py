@@ -99,6 +99,11 @@ class TestCase(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     input: Mapped[str] = mapped_column(Text, nullable=False)
     assertions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # LLM-as-judge metrikleri (Faz B): [{type, threshold, expected?, criteria?, name?}]
+    judges: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    # Tutarlılık (Faz C): case'i kaç kez çalıştır + geçmesi için min geçme oranı
+    repeat: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    min_pass_rate: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
     expected_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     rag_context: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
@@ -190,6 +195,10 @@ class TestCaseResult(Base):
     rag_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Adım-adım trajectory: [{name, arguments, result, ok}] — agent'ın test sırasında ne yaptığı
     trajectory: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # LLM-as-judge skorları (Faz B): [{type, score, passed, threshold, rationale|error}]
+    judge_results: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Tutarlılık (Faz C): {runs, passed_runs, pass_rate, min_pass_rate, runs_detail}
+    consistency: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Token kullanımından yaklaşık USD maliyet
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

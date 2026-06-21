@@ -128,6 +128,9 @@ async def create_test_suite(
             name=pc.name,
             input=pc.input,
             assertions=[{"type": a.type, "value": a.value} for a in pc.assertions],
+            judges=[j.to_dict() for j in pc.judges],
+            repeat=pc.repeat,
+            min_pass_rate=pc.min_pass_rate,
             expected_output=pc.expected_output,
             rag_context=pc.rag_context,
         )
@@ -208,6 +211,9 @@ async def update_test_suite(
                 name=pc.name,
                 input=pc.input,
                 assertions=[{"type": a.type, "value": a.value} for a in pc.assertions],
+                judges=[j.to_dict() for j in pc.judges],
+                repeat=pc.repeat,
+                min_pass_rate=pc.min_pass_rate,
                 expected_output=pc.expected_output,
                 rag_context=pc.rag_context,
             ))

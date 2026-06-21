@@ -12,6 +12,7 @@ Tek bir TestCase'i çalıştırır:
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -100,31 +101,118 @@ async def run_case(
 
     sandbox = AgentSandbox(config=config, provider=provider, redis=redis, db=db)
 
-    # Çalıştır
-    try:
-        sandbox_result: SandboxResult = await sandbox.run(case.input)
-    except AgentError as exc:
+    # Faz C: tutarlılık — case'i repeat kez çalıştır
+    repeat = max(1, int(getattr(case, "repeat", 1) or 1))
+    min_pass_rate = float(getattr(case, "min_pass_rate", 1.0) or 1.0)
+
+    outcomes: list[_RunOutcome | None] = []
+    for _ in range(repeat):
+        try:
+            outcomes.append(await _evaluate_once(sandbox, case, provider, agent_row.model))
+        except AgentError as exc:
+            if repeat == 1:
+                return await _save_result(
+                    db, run.id, case.id, status="error",
+                    error_message=f"{exc.code}: {exc.message}",
+                )
+            outcomes.append(None)
+        except Exception as exc:
+            logger.error("test_case_runner.unexpected_error", case_id=str(case.id), error=str(exc))
+            if repeat == 1:
+                return await _save_result(db, run.id, case.id, status="error", error_message=str(exc))
+            outcomes.append(None)
+
+    valid = [o for o in outcomes if o is not None]
+    if not valid:
         return await _save_result(
-            db, run.id, case.id,
-            status="error",
-            error_message=f"{exc.code}: {exc.message}",
-        )
-    except Exception as exc:
-        logger.error("test_case_runner.unexpected_error", case_id=str(case.id), error=str(exc))
-        return await _save_result(
-            db, run.id, case.id,
-            status="error",
-            error_message=str(exc),
+            db, run.id, case.id, status="error",
+            error_message="Tüm tekrarlar hata verdi.",
         )
 
-    # Assertion'ları değerlendir
+    rep = valid[0]  # temsilci: ilk başarılı çalıştırma
+
+    if repeat == 1:
+        consistency = None
+        status = "passed" if rep.passed else "failed"
+        total_tokens = rep.total_tokens
+        cost_usd = rep.cost_usd
+        latency_ms = rep.latency_ms
+    else:
+        passed_runs = sum(1 for o in valid if o.passed)
+        errored = sum(1 for o in outcomes if o is None)
+        pass_rate = passed_runs / repeat  # hatalı tekrarlar geçmemiş sayılır
+        status = "passed" if pass_rate >= min_pass_rate else "failed"
+        total_tokens = sum(o.total_tokens or 0 for o in valid) or None
+        cost_total = sum(o.cost_usd or 0 for o in valid)
+        cost_usd = round(cost_total, 6) if cost_total else None
+        latency_ms = round(sum(o.latency_ms for o in valid) / len(valid))
+        consistency = {
+            "runs": repeat,
+            "passed_runs": passed_runs,
+            "errored_runs": errored,
+            "pass_rate": round(pass_rate, 4),
+            "min_pass_rate": min_pass_rate,
+            "runs_detail": [
+                ({"passed": o.passed, "latency_ms": o.latency_ms,
+                  "total_tokens": o.total_tokens, "cost_usd": o.cost_usd}
+                 if o is not None else {"passed": False, "errored": True})
+                for o in outcomes
+            ],
+        }
+
+    return await _save_result(
+        db, run.id, case.id,
+        status=status,
+        output=rep.output,
+        trace_id=rep.trace_id,
+        latency_ms=latency_ms,
+        steps_taken=rep.steps_taken,
+        total_tokens=total_tokens,
+        assertions_results=rep.assertion_results,
+        rag_metrics=rep.rag_metrics,
+        trajectory=rep.trajectory,
+        judge_results=rep.judge_results,
+        cost_usd=cost_usd,
+        consistency=consistency,
+    )
+
+
+@dataclass
+class _RunOutcome:
+    passed: bool
+    output: str
+    trace_id: str
+    latency_ms: int
+    steps_taken: int
+    total_tokens: int | None
+    cost_usd: float | None
+    assertion_results: list   # [dict]
+    judge_results: list | None
+    rag_metrics: dict | None
+    trajectory: list
+
+
+async def _evaluate_once(sandbox, case, provider, model) -> _RunOutcome:
+    """Agent'ı bir kez çalıştırır, assertion + judge + RAG değerlendirir.
+    Sandbox hatasında exception fırlatır (çağıran tarafından yakalanır)."""
+    sandbox_result: SandboxResult = await sandbox.run(case.input)
+
     assertion_results = evaluate_all(
         [{"type": a["type"], "value": a["value"]} for a in (case.assertions or [])],
         sandbox_result,
     )
-    all_passed = all(r.passed for r in assertion_results)
+    assertions_passed = all(r.passed for r in assertion_results)
 
-    # RAG metrikleri
+    judge_results = None
+    judges_passed = True
+    if case.judges:
+        from app.services.test_suite.judge import evaluate_judges
+        judge_results = await evaluate_judges(
+            case.judges, case.input, sandbox_result.agent_result.content,
+            sandbox_result, provider, model,
+        )
+        judges_passed = all(j["passed"] for j in judge_results if j.get("passed") is not None)
+
     rag_metrics = None
     if case.rag_context:
         try:
@@ -137,20 +225,20 @@ async def run_case(
             logger.warning("test_case_runner.rag_eval_failed", error=str(exc))
 
     ar = sandbox_result.agent_result
-    total_tokens = sum(sandbox_result.agent_result.total_usage.values()) if ar.total_usage else None
+    total_tokens = sum(ar.total_usage.values()) if ar.total_usage else None
 
-    return await _save_result(
-        db, run.id, case.id,
-        status="passed" if all_passed else "failed",
+    return _RunOutcome(
+        passed=assertions_passed and judges_passed,
         output=ar.content,
         trace_id=ar.trace_id,
         latency_ms=sandbox_result.latency_ms,
         steps_taken=ar.steps_taken,
         total_tokens=total_tokens,
-        assertions_results=[r.to_dict() for r in assertion_results],
+        cost_usd=sandbox_result.cost_usd,
+        assertion_results=[r.to_dict() for r in assertion_results],
+        judge_results=judge_results,
         rag_metrics=rag_metrics,
         trajectory=sandbox_result.trajectory,
-        cost_usd=sandbox_result.cost_usd,
     )
 
 
@@ -168,6 +256,8 @@ async def _save_result(
     assertions_results: list | None = None,
     rag_metrics: dict | None = None,
     trajectory: list | None = None,
+    judge_results: list | None = None,
+    consistency: dict | None = None,
     cost_usd: float | None = None,
     error_message: str | None = None,
 ) -> TestCaseResult:
@@ -184,6 +274,8 @@ async def _save_result(
         assertions_results=assertions_results or [],
         rag_metrics=rag_metrics,
         trajectory=trajectory,
+        judge_results=judge_results,
+        consistency=consistency,
         cost_usd=cost_usd,
         error_message=error_message,
         created_at=datetime.now(UTC),

@@ -33,6 +33,11 @@ cases:
         value: { name: "write_file", args: { path: "research/burotime.md" } }
       - type: no_tool_errors
         value: true
+      # Güvenlik (deterministik)
+      - type: no_pii            # çıktıda email/uzun numara sızıntısı yok
+        value: true
+      - type: not_refused       # geçerli isteği reddetmedi
+        value: true
       # Operasyonel bütçeler
       - type: steps_under
         value: 8
@@ -42,6 +47,18 @@ cases:
         value: 0.05
       - type: latency_under
         value: 60000
+    # Tutarlılık (opsiyonel): 3 kez çalıştır, en az 2/3 geçerse "passed"
+    repeat: 3
+    min_pass_rate: 0.66
+    # LLM-as-judge (opsiyonel — token harcar, sadece tanımlarsan çalışır)
+    judges:
+      - type: task_completion        # hedefe ulaştı mı? (skor 0–1, eşik 0.7)
+      - type: step_efficiency
+        threshold: 0.6
+      - type: safety                 # toksik/zararlı/PII içeriği yok mu
+        threshold: 0.9
+      - type: rubric
+        criteria: "Cevap Türkçe olmalı ve en az bir kaynak belirtmeli."
 `;
 
 export default function NewTestSuitePage() {
@@ -103,7 +120,7 @@ export default function NewTestSuitePage() {
           onChange={(e) => setConfigYaml(e.target.value)}
           rows={14}
           className="font-mono text-xs"
-          hint="agent_id'yi gerçek bir agent'a ayarla. Assertion'lar — çıktı: response_contains/not_contains/equals/regex · tool: tool_called/tool_called_with_args/tool_sequence/tools_used/no_tool_errors · bütçe: steps_under/tokens_under/cost_under/latency_under/finish_reason_is."
+          hint="agent_id'yi gerçek agent'a ayarla. Assertion'lar (deterministik) — çıktı: response_contains/not_contains/equals/regex · tool: tool_called/with_args/sequence/tools_used/no_tool_errors · güvenlik: no_pii/not_refused · bütçe: steps/tokens/cost/latency_under. judges (opsiyonel, token harcar): task_completion/answer_correctness/rubric/step_efficiency/argument_correctness/reasoning_quality/safety. Tutarlılık: repeat + min_pass_rate."
           required
         />
 

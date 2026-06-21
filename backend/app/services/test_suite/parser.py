@@ -59,6 +59,21 @@ SUPPORTED_ASSERTION_TYPES = {
     "steps_under",
     "tokens_under",
     "cost_under",
+    # Güvenlik (deterministik)
+    "no_pii",
+    "not_refused",
+}
+
+
+# LLM-as-judge metrik tipleri (Faz B) — opsiyonel, token harcar
+JUDGE_TYPES = {
+    "task_completion",      # agent hedefe ulaştı mı?
+    "answer_correctness",   # çıktı beklenen cevaba göre doğru mu?
+    "rubric",               # özel kriter (G-Eval)
+    "step_efficiency",      # gereksiz adım/döngü var mı?
+    "argument_correctness", # tool argümanları doğru muydu?
+    "reasoning_quality",    # akıl yürütme tutarlı/ilgili mi?
+    "safety",               # çıktı güvenli mi? (toksisite/zarar/önyargı yok)
 }
 
 
@@ -69,10 +84,32 @@ class ParsedAssertion:
 
 
 @dataclass
+class ParsedJudge:
+    type: str
+    threshold: float = 0.7
+    expected: str | None = None
+    criteria: str | None = None
+    name: str | None = None
+
+    def to_dict(self) -> dict:
+        d: dict = {"type": self.type, "threshold": self.threshold}
+        if self.expected is not None:
+            d["expected"] = self.expected
+        if self.criteria is not None:
+            d["criteria"] = self.criteria
+        if self.name is not None:
+            d["name"] = self.name
+        return d
+
+
+@dataclass
 class ParsedTestCase:
     name: str
     input: str
     assertions: list[ParsedAssertion]
+    judges: list[ParsedJudge] = field(default_factory=list)
+    repeat: int = 1
+    min_pass_rate: float = 1.0
     agent_id: uuid.UUID | None = None
     expected_output: str | None = None
     rag_context: list[str] | None = None
@@ -111,6 +148,9 @@ def parse_yaml(raw_yaml: str) -> ParsedTestSuite:
         raise ParseError("'description' string olmalı.")
 
     suite_agent_id = _parse_agent_id(data.get("agent_id"), context="suite")
+    suite_judges = _parse_judges(data.get("judges"), "suite")  # tüm case'lere uygulanır
+    suite_repeat = _parse_repeat(data.get("repeat"), "suite", 1)
+    suite_min_pass = _parse_min_pass_rate(data.get("min_pass_rate"), "suite", 1.0)
 
     raw_cases = data.get("cases")
     if not isinstance(raw_cases, list) or len(raw_cases) == 0:
@@ -120,7 +160,9 @@ def parse_yaml(raw_yaml: str) -> ParsedTestSuite:
     for i, raw_case in enumerate(raw_cases):
         if not isinstance(raw_case, dict):
             raise ParseError(f"cases[{i}]: dict olmalı.")
-        cases.append(_parse_case(raw_case, i, suite_agent_id))
+        cases.append(_parse_case(
+            raw_case, i, suite_agent_id, suite_judges, suite_repeat, suite_min_pass,
+        ))
 
     return ParsedTestSuite(
         name=name,
@@ -134,6 +176,9 @@ def _parse_case(
     raw: dict,
     index: int,
     suite_agent_id: uuid.UUID | None,
+    suite_judges: list[ParsedJudge] | None = None,
+    suite_repeat: int = 1,
+    suite_min_pass: float = 1.0,
 ) -> ParsedTestCase:
     ctx = f"cases[{index}]"
     name = _require_str(raw, "name", ctx)
@@ -176,6 +221,14 @@ def _parse_case(
             raise ParseError(f"{actx}: 'value' zorunlu.")
         assertions.append(ParsedAssertion(type=a_type, value=raw_a["value"]))
 
+    # Judges: suite-level + case-level (birleştirilir)
+    case_judges = _parse_judges(raw.get("judges"), ctx, expected_output)
+    judges = list(suite_judges or []) + case_judges
+
+    # Tutarlılık: case-level varsa onu, yoksa suite-level'ı kullan
+    repeat = _parse_repeat(raw.get("repeat"), ctx, suite_repeat)
+    min_pass_rate = _parse_min_pass_rate(raw.get("min_pass_rate"), ctx, suite_min_pass)
+
     return ParsedTestCase(
         name=name,
         input=input_text,
@@ -183,7 +236,82 @@ def _parse_case(
         expected_output=expected_output,
         rag_context=rag_context,
         assertions=assertions,
+        judges=judges,
+        repeat=repeat,
+        min_pass_rate=min_pass_rate,
     )
+
+
+def _parse_repeat(raw: object, ctx: str, default: int) -> int:
+    if raw is None:
+        return default
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        raise ParseError(f"{ctx}.repeat: tam sayı olmalı.")
+    if not 1 <= n <= 20:
+        raise ParseError(f"{ctx}.repeat: 1–20 aralığında olmalı.")
+    return n
+
+
+def _parse_min_pass_rate(raw: object, ctx: str, default: float) -> float:
+    if raw is None:
+        return default
+    try:
+        r = float(raw)
+    except (TypeError, ValueError):
+        raise ParseError(f"{ctx}.min_pass_rate: sayı olmalı.")
+    if not 0.0 <= r <= 1.0:
+        raise ParseError(f"{ctx}.min_pass_rate: 0.0–1.0 aralığında olmalı.")
+    return r
+
+
+def _parse_judges(
+    raw: object,
+    ctx: str,
+    case_expected: str | None = None,
+) -> list[ParsedJudge]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ParseError(f"{ctx}.judges: liste olmalı.")
+    judges: list[ParsedJudge] = []
+    for j, raw_j in enumerate(raw):
+        jctx = f"{ctx}.judges[{j}]"
+        if not isinstance(raw_j, dict):
+            raise ParseError(f"{jctx}: dict olmalı.")
+        j_type = _require_str(raw_j, "type", jctx)
+        if j_type not in JUDGE_TYPES:
+            raise ParseError(
+                f"{jctx}.type '{j_type}' desteklenmiyor. Geçerli: {sorted(JUDGE_TYPES)}"
+            )
+        threshold = raw_j.get("threshold", 0.7)
+        try:
+            threshold = float(threshold)
+        except (TypeError, ValueError):
+            raise ParseError(f"{jctx}.threshold: sayı olmalı.")
+        if not 0.0 <= threshold <= 1.0:
+            raise ParseError(f"{jctx}.threshold: 0.0–1.0 aralığında olmalı.")
+
+        expected = raw_j.get("expected")
+        if expected is None and j_type == "answer_correctness":
+            expected = case_expected  # case.expected_output'a düş
+        criteria = raw_j.get("criteria")
+        if j_type == "rubric" and not (criteria and str(criteria).strip()):
+            raise ParseError(f"{jctx}: 'rubric' için 'criteria' zorunlu.")
+        if j_type == "answer_correctness" and not (expected and str(expected).strip()):
+            raise ParseError(
+                f"{jctx}: 'answer_correctness' için 'expected' (veya case.expected_output) zorunlu."
+            )
+
+        judges.append(ParsedJudge(
+            type=j_type,
+            threshold=threshold,
+            expected=str(expected) if expected is not None else None,
+            criteria=str(criteria) if criteria is not None else None,
+            name=raw_j.get("name"),
+        ))
+    return judges
 
 
 def _require_str(data: dict, key: str, ctx: str = "root") -> str:

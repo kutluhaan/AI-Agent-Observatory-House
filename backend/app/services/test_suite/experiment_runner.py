@@ -225,6 +225,12 @@ def _compute_summary(results: list[TestCaseResult]) -> dict:
     latencies = [r.latency_ms for r in results if r.latency_ms is not None]
     tokens = [r.total_tokens for r in results if r.total_tokens is not None]
     costs = [r.cost_usd for r in results if r.cost_usd is not None]
+    judge_scores = [
+        j["score"]
+        for r in results
+        for j in (r.judge_results or [])
+        if j.get("score") is not None
+    ]
     return {
         "total": total,
         "passed": passed,
@@ -234,4 +240,5 @@ def _compute_summary(results: list[TestCaseResult]) -> dict:
         "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,
         "total_tokens": sum(tokens) if tokens else None,
         "total_cost_usd": round(sum(costs), 6) if costs else None,
+        "avg_judge_score": round(sum(judge_scores) / len(judge_scores), 4) if judge_scores else None,
     }
