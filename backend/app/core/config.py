@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ollama_base_url: str = "http://host.docker.internal:11434"
 
+    # F3: Self-hosted / OpenAI-uyumlu custom model (env > Providers UI override)
+    #   CUSTOM_BASE_URL: OpenAI-uyumlu kök (ör. http://host.docker.internal:8000/v1)
+    #   CUSTOM_API_KEY:  endpoint istiyorsa; istemiyorsa boş bırak
+    custom_base_url: str = ""
+    custom_api_key: str = ""
+
     # M12: Research tools
     tavily_api_key: str = ""
 

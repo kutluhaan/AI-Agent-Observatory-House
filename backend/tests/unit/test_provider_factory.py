@@ -154,6 +154,37 @@ async def test_factory_raises_when_no_key_anywhere(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_factory_custom_uses_env_base_url(monkeypatch):
+    """Custom: org credential yoksa .env CUSTOM_BASE_URL kullanılmalı (F3)."""
+    monkeypatch.setattr("app.services.providers.factory.settings.custom_base_url", "http://gpu:8000/v1")
+    monkeypatch.setattr("app.services.providers.factory.settings.custom_api_key", "")
+
+    db = AsyncMock()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=result_mock)
+
+    provider = await get_provider(db, uuid.uuid4(), "custom")
+    assert isinstance(provider, OpenAIProvider)
+    assert str(provider._client.base_url).startswith("http://gpu:8000/v1")
+
+
+@pytest.mark.asyncio
+async def test_factory_custom_no_base_url_raises(monkeypatch):
+    """Custom: ne org ne env'de base_url → PROVIDER_NOT_CONFIGURED."""
+    monkeypatch.setattr("app.services.providers.factory.settings.custom_base_url", "")
+
+    db = AsyncMock()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=result_mock)
+
+    with pytest.raises(AppError) as exc:
+        await get_provider(db, uuid.uuid4(), "custom")
+    assert exc.value.code == "PROVIDER_NOT_CONFIGURED"
+
+
+@pytest.mark.asyncio
 async def test_factory_uses_org_credential_over_platform(monkeypatch):
     """Org'un kendi key'i varsa platform key'ine düşülmemeli."""
     monkeypatch.setattr("app.services.providers.factory.settings.openai_api_key", "sk-platform-key")
@@ -204,7 +235,7 @@ async def test_factory_ollama_raises_when_no_base_url(monkeypatch):
 
 
 def test_supported_providers_set():
-    assert SUPPORTED_PROVIDERS == {"openai", "anthropic", "gemini", "ollama"}
+    assert SUPPORTED_PROVIDERS == {"openai", "anthropic", "gemini", "ollama", "custom"}
 
 
 @pytest.mark.asyncio

@@ -46,9 +46,9 @@ async def set_provider_credential(
     Ollama: base_url zorunlu, api_key opsiyonel.
     OpenAI/Anthropic: api_key zorunlu.
     """
-    if body.provider == "ollama":
+    if body.provider in ("ollama", "custom"):
         if not body.base_url:
-            raise AppError("VALIDATION_ERROR", "base_url is required for Ollama.", 422)
+            raise AppError("VALIDATION_ERROR", "base_url is required for this provider.", 422)
     else:
         if not body.api_key:
             raise AppError("VALIDATION_ERROR", "api_key is required for this provider.", 422)

@@ -75,6 +75,7 @@ JUDGE_TYPES = {
     "argument_correctness", # tool argümanları doğru muydu?
     "reasoning_quality",    # akıl yürütme tutarlı/ilgili mi?
     "safety",               # çıktı güvenli mi? (toksisite/zarar/önyargı yok)
+    "output_quality",       # bileşik kalite: doğruluk+bütünlük+netlik+yardımcılık (F4.1)
 }
 
 

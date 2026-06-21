@@ -49,6 +49,7 @@ const JUDGE_LABELS: Record<string, string> = {
   argument_correctness: "Argüman doğruluğu",
   reasoning_quality: "Akıl yürütme",
   safety: "Güvenlik",
+  output_quality: "Çıktı kalitesi",
 };
 
 function isLive(status: string | undefined): boolean {

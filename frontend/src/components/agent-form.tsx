@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import {
   ShieldCheck,
   FolderTree,
@@ -22,6 +23,7 @@ const PROVIDERS = [
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "ollama", label: "Ollama (local)" },
+  { value: "custom", label: "Custom (OpenAI-uyumlu, self-hosted)" },
 ];
 
 const MODELS_BY_PROVIDER: Record<string, string[]> = {
@@ -172,8 +174,27 @@ export function AgentForm({
             setModel(MODELS_BY_PROVIDER[v]?.[0] ?? "");
           }}
         />
-        <Dropdown label="Model" value={model} options={modelOptions} onChange={setModel} />
+        {provider === "custom" ? (
+          <Input
+            label="Model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="gpt-oss-20b"
+          />
+        ) : (
+          <Dropdown label="Model" value={model} options={modelOptions} onChange={setModel} />
+        )}
       </div>
+      {provider === "custom" && (
+        <p className="-mt-2 text-xs text-zinc-500">
+          Endpoint URL&apos;ini <code className="text-indigo-300">.env</code>&apos;deki{" "}
+          <code className="text-indigo-300">CUSTOM_BASE_URL</code>&apos;e yaz (önerilen) ya da{" "}
+          <Link href="/providers" className="text-indigo-400 hover:text-indigo-300">
+            Sağlayıcılar
+          </Link>{" "}
+          sayfasından gir — OpenAI-uyumlu base_url + (gerekiyorsa) API anahtarı.
+        </p>
+      )}
 
       <Input
         label="Temperature"

@@ -7,14 +7,14 @@ from pydantic import BaseModel, field_validator
 
 class SetProviderCredentialRequest(BaseModel):
     provider: str
-    api_key: str | None = None  # ollama'da gerekmez
-    base_url: str | None = None  # sadece ollama'da kullanılır
+    api_key: str | None = None   # ollama/custom'da opsiyonel
+    base_url: str | None = None  # ollama ve custom (OpenAI-uyumlu) için
 
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:
-        if v not in ("openai", "anthropic", "gemini", "ollama"):
-            raise ValueError("Provider must be 'openai', 'anthropic', 'gemini', or 'ollama'.")
+        if v not in ("openai", "anthropic", "gemini", "ollama", "custom"):
+            raise ValueError("Provider must be openai, anthropic, gemini, ollama, or custom.")
         return v
 
 

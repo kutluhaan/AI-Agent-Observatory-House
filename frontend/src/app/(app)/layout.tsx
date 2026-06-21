@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2 } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth";
@@ -99,6 +99,15 @@ function TopBar() {
             <Plus size={12} />
             Create workspace
           </button>
+        )}
+        {user?.org_id && (
+          <Link
+            href="/providers"
+            title="Model sağlayıcıları"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+          >
+            <Server size={15} />
+          </Link>
         )}
         {user && (
           <span className="ml-1 hidden text-xs text-zinc-600 sm:inline">{user.email}</span>

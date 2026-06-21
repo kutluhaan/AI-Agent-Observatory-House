@@ -109,6 +109,44 @@ async def test_set_ollama_with_base_url_succeeds(client):
     assert assert_success(resp.json())["base_url"] == "http://localhost:11434"
 
 
+# ─── Custom (self-hosted OpenAI-compatible) provider — F3 ──
+
+@pytest.mark.integration
+async def test_set_custom_requires_base_url(client):
+    _require_db()
+    await _owner_in_org(client)
+    resp = await client.post("/providers", json={"provider": "custom"})
+    assert resp.status_code == 422
+    assert_error(resp.json(), "VALIDATION_ERROR")
+
+
+@pytest.mark.integration
+async def test_set_custom_with_base_url_succeeds_keyless(client):
+    _require_db()
+    await _owner_in_org(client)
+    resp = await client.post(
+        "/providers", json={"provider": "custom", "base_url": "http://gpu-server:8000/v1"}
+    )
+    assert resp.status_code == 201
+    data = assert_success(resp.json())
+    assert data["provider"] == "custom"
+    assert data["base_url"] == "http://gpu-server:8000/v1"
+
+
+@pytest.mark.integration
+async def test_create_agent_with_custom_provider(client):
+    _require_db()
+    await _owner_in_org(client)
+    resp = await client.post("/agents", json={
+        "name": f"custom-{uuid.uuid4().hex[:6]}",
+        "system_prompt": "You are helpful.",
+        "provider": "custom",
+        "model": "gpt-oss-20b",
+    })
+    assert resp.status_code == 201
+    assert assert_success(resp.json())["provider"] == "custom"
+
+
 @pytest.mark.integration
 async def test_invalid_provider_name_rejected(client):
     _require_db()
@@ -148,7 +186,7 @@ async def test_list_credentials_shows_unconfigured_providers(client):
     resp = await client.get("/providers")
     assert resp.status_code == 200
     providers = assert_success(resp.json())
-    assert len(providers) == 4  # openai, anthropic, gemini, ollama
+    assert len(providers) == 5  # openai, anthropic, gemini, ollama, custom
     assert all(p["is_configured"] is False for p in providers)
 
 

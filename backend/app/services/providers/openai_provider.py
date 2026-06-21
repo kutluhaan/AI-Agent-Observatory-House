@@ -64,8 +64,9 @@ class OpenAIProvider(BaseLLMProvider):
     name = "openai"
     supports_tools = True
 
-    def __init__(self, api_key: str):
-        self._client = AsyncOpenAI(api_key=api_key)
+    def __init__(self, api_key: str, base_url: str | None = None):
+        # base_url verilirse OpenAI-uyumlu self-hosted endpoint kullanılır (F3 custom provider).
+        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     async def complete(
         self,

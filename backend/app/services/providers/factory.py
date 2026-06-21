@@ -25,7 +25,7 @@ from app.services.providers.openai_provider import OpenAIProvider
 
 settings = get_settings()
 
-SUPPORTED_PROVIDERS = {"openai", "anthropic", "gemini", "ollama"}
+SUPPORTED_PROVIDERS = {"openai", "anthropic", "gemini", "ollama", "custom"}
 
 
 async def get_provider(
@@ -66,6 +66,23 @@ async def get_provider(
                 404,
             )
         return OllamaProvider(base_url=base_url)
+
+    if provider_name == "custom":
+        # OpenAI-uyumlu self-hosted endpoint (F3). base_url zorunlu, api_key opsiyonel.
+        # Çözümleme: org credential (Providers UI) > .env CUSTOM_BASE_URL.
+        base_url = (credential.base_url if credential else None) or settings.custom_base_url
+        if not base_url:
+            raise AppError(
+                "PROVIDER_NOT_CONFIGURED",
+                "Custom model base URL not set. Set CUSTOM_BASE_URL in .env (preferred) "
+                "or configure it on the Providers page.",
+                404,
+            )
+        api_key = None
+        if credential and credential.encrypted_key:
+            api_key = decrypt_value(credential.encrypted_key)
+        api_key = api_key or settings.custom_api_key or "not-needed"
+        return OpenAIProvider(api_key=api_key, base_url=base_url)
 
     # openai / anthropic / gemini — API key gerekli
     _platform_keys = {
