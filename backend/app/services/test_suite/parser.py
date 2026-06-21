@@ -52,6 +52,7 @@ SUPPORTED_ASSERTION_TYPES = {
     "tool_called_with_args",
     "tool_sequence",
     "tools_used",
+    "tool_correctness",
     "no_tool_errors",
     # Operasyonel (deterministik)
     "latency_under",

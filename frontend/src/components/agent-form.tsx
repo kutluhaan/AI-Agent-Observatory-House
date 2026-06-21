@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck, FolderTree } from "lucide-react";
-import { api, ApiError, type AgentTool } from "@/lib/api";
+import {
+  ShieldCheck,
+  FolderTree,
+  Globe,
+  Brain,
+  TrendingUp,
+  Briefcase,
+} from "lucide-react";
+import { api, ApiError, type ToolCategory } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,6 +29,14 @@ const MODELS_BY_PROVIDER: Record<string, string[]> = {
   openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"],
   anthropic: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5"],
   ollama: ["qwen3:4b", "llama3.2", "qwen2.5", "mistral"],
+};
+
+const CATEGORY_ICONS: Record<string, typeof Globe> = {
+  file: FolderTree,
+  web: Globe,
+  self: Brain,
+  finance: TrendingUp,
+  operation: Briefcase,
 };
 
 export interface AgentFormValues {
@@ -49,7 +64,7 @@ export function AgentForm({
   const [provider, setProvider] = useState(initial?.provider ?? "gemini");
   const [model, setModel] = useState(initial?.model ?? "gemini-2.5-flash");
   const [temperature, setTemperature] = useState(initial?.temperature ?? 0.7);
-  const [tools, setTools] = useState<AgentTool[]>([]);
+  const [categories, setCategories] = useState<ToolCategory[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set(initial?.tool_names ?? []));
   const [hitl, setHitl] = useState<Set<string>>(new Set(initial?.hitl_tool_names ?? []));
   const [fileSystem, setFileSystem] = useState(initial?.file_system_enabled ?? false);
@@ -57,7 +72,7 @@ export function AgentForm({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.get<AgentTool[]>("/agents/tools").then(setTools).catch(() => {});
+    api.get<ToolCategory[]>("/agents/tool-categories").then(setCategories).catch(() => {});
   }, []);
 
   function toggleTool(toolName: string) {
@@ -75,6 +90,21 @@ export function AgentForm({
       }
       return next;
     });
+  }
+
+  function setCategoryTools(toolNames: string[], on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      toolNames.forEach((n) => (on ? next.add(n) : next.delete(n)));
+      return next;
+    });
+    if (!on) {
+      setHitl((prev) => {
+        const next = new Set(prev);
+        toolNames.forEach((n) => next.delete(n));
+        return next;
+      });
+    }
   }
 
   function toggleHitl(toolName: string) {
@@ -155,81 +185,127 @@ export function AgentForm({
         onChange={(e) => setTemperature(parseFloat(e.target.value))}
       />
 
-      {/* Dosya sistemi — açılırsa dosya tool'ları otomatik eklenir */}
-      <div
-        className={cn(
-          "rounded-lg border px-3 py-3 transition-colors",
-          fileSystem ? "border-indigo-500/30 bg-indigo-500/5" : "border-zinc-800",
-        )}
-      >
-        <label className="flex cursor-pointer items-start gap-2.5">
-          <input
-            type="checkbox"
-            checked={fileSystem}
-            onChange={(e) => setFileSystem(e.target.checked)}
-            className="mt-0.5 accent-indigo-500"
-          />
-          <div className="flex-1">
-            <div className="flex items-center gap-1.5">
-              <FolderTree size={14} className="text-indigo-400" />
-              <span className="text-sm text-zinc-200">Dosya sistemi</span>
-            </div>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Agent&apos;a izole, kalıcı bir dosya sistemi ver. Açılırsa dosya araçları
-              (yaz/oku/düzenle/sil/listele/ara/klasör/taşı/klasör-sil) otomatik eklenir. Veri
-              kaybettirebilecek araçlar (sil/düzenle/klasör-sil) varsayılan olarak onaydan geçer.
-            </p>
-          </div>
-        </label>
-      </div>
-
-      {tools.length > 0 && (
+      {/* Tool kategorileri */}
+      <div className="flex flex-col gap-2">
+        <span className="text-xs font-medium tracking-wide text-zinc-400">Araçlar — kategoriler</span>
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium tracking-wide text-zinc-400">Tools</span>
-          <div className="flex flex-col gap-1.5">
-            {tools.map((tool) => {
-              const isSelected = selected.has(tool.name);
-              const isHitl = hitl.has(tool.name);
+          {categories.map((cat) => {
+            const Icon = CATEGORY_ICONS[cat.key] ?? Globe;
+
+            // Dosya kategorisi → "Dosya sistemi" anahtarıyla yönetilir
+            if (cat.managed_by_file_system) {
               return (
                 <div
-                  key={tool.name}
+                  key={cat.key}
                   className={cn(
-                    "rounded-lg border px-3 py-2.5 transition-colors",
-                    isSelected
-                      ? "border-indigo-500/30 bg-indigo-500/5"
-                      : "border-zinc-800 hover:border-zinc-700",
+                    "rounded-lg border px-3 py-3 transition-colors",
+                    fileSystem ? "border-indigo-500/30 bg-indigo-500/5" : "border-zinc-800",
                   )}
                 >
                   <label className="flex cursor-pointer items-start gap-2.5">
                     <input
                       type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleTool(tool.name)}
+                      checked={fileSystem}
+                      onChange={(e) => setFileSystem(e.target.checked)}
                       className="mt-0.5 accent-indigo-500"
                     />
                     <div className="flex-1">
-                      <p className="text-sm text-zinc-200">{tool.name}</p>
-                      <p className="text-xs text-zinc-600">{tool.description}</p>
+                      <div className="flex items-center gap-1.5">
+                        <Icon size={14} className="text-indigo-400" />
+                        <span className="text-sm text-zinc-200">{cat.label}</span>
+                        <span className="text-[11px] text-zinc-600">({cat.tools.length} araç)</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-zinc-500">
+                        Açılırsa {cat.tools.map((t) => t.name).join(", ")} otomatik eklenir.
+                        Veri kaybettirebilecek araçlar (sil/düzenle/klasör-sil) varsayılan
+                        olarak onaydan geçer.
+                      </p>
                     </div>
                   </label>
-                  {isSelected && tool.name !== "ask_user" && (
-                    <label className="mt-2 flex cursor-pointer items-center gap-2 pl-7 text-xs text-amber-300/80">
-                      <input
-                        type="checkbox"
-                        checked={isHitl}
-                        onChange={() => toggleHitl(tool.name)}
-                        className="accent-amber-500"
-                      />
-                      <ShieldCheck size={12} />
-                      Require human approval (HITL)
-                    </label>
-                  )}
                 </div>
               );
-            })}
-          </div>
+            }
+
+            // Yakında (finance/operation)
+            if (cat.coming_soon) {
+              return (
+                <div
+                  key={cat.key}
+                  className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-800 px-3 py-2.5 opacity-60"
+                >
+                  <Icon size={14} className="text-zinc-600" />
+                  <span className="text-sm text-zinc-400">{cat.label}</span>
+                  <span className="ml-auto rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
+                    yakında
+                  </span>
+                </div>
+              );
+            }
+
+            // Seçilebilir kategori (web / self)
+            const toolNames = cat.tools.map((t) => t.name);
+            const allOn = toolNames.length > 0 && toolNames.every((n) => selected.has(n));
+            return (
+              <div key={cat.key} className="rounded-lg border border-zinc-800 px-3 py-2.5">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <Icon size={14} className="text-indigo-400" />
+                  <span className="text-sm font-medium text-zinc-200">{cat.label}</span>
+                  <span className="text-[11px] text-zinc-600">{cat.note}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryTools(toolNames, !allOn)}
+                    className="ml-auto text-[11px] text-indigo-400 transition-colors hover:text-indigo-300"
+                  >
+                    {allOn ? "Tümünü kaldır" : "Tümünü seç"}
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {cat.tools.map((tool) => {
+                    const isSelected = selected.has(tool.name);
+                    const isHitl = hitl.has(tool.name);
+                    return (
+                      <div
+                        key={tool.name}
+                        className={cn(
+                          "rounded-md border px-3 py-2 transition-colors",
+                          isSelected
+                            ? "border-indigo-500/30 bg-indigo-500/5"
+                            : "border-zinc-800/70 hover:border-zinc-700",
+                        )}
+                      >
+                        <label className="flex cursor-pointer items-start gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleTool(tool.name)}
+                            className="mt-0.5 accent-indigo-500"
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm text-zinc-200">{tool.name}</p>
+                            <p className="text-xs text-zinc-600">{tool.description}</p>
+                          </div>
+                        </label>
+                        {isSelected && tool.name !== "ask_user" && (
+                          <label className="mt-2 flex cursor-pointer items-center gap-2 pl-7 text-xs text-amber-300/80">
+                            <input
+                              type="checkbox"
+                              checked={isHitl}
+                              onChange={() => toggleHitl(tool.name)}
+                              className="accent-amber-500"
+                            />
+                            <ShieldCheck size={12} />
+                            İnsan onayı gerektir (HITL)
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       <Button type="submit" size="lg" loading={submitting} className="mt-2">
         {submitLabel}

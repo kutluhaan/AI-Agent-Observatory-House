@@ -57,7 +57,7 @@ async def test_file_tools_excluded_from_tool_list(client):
     await _owner(client)
     tools = assert_success((await client.get("/agents/tools")).json())
     names = {t["name"] for t in tools}
-    assert "echo" in names
+    assert "web_search" in names  # seçilebilir bir tool görünür
     for ft in ("write_file", "read_file", "move_file"):
         assert ft not in names
 

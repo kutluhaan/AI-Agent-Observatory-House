@@ -4,11 +4,19 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Play, ChevronRight } from "lucide-react";
-import { api, ApiError, type TestSuite, type TestRun } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  type TestSuite,
+  type TestRun,
+  type SuiteStats,
+  type SuiteTrendPoint,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge, statusVariant } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export default function TestSuiteDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +24,7 @@ export default function TestSuiteDetailPage() {
 
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [runs, setRuns] = useState<TestRun[]>([]);
+  const [stats, setStats] = useState<SuiteStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [parallel, setParallel] = useState(false);
@@ -23,6 +32,7 @@ export default function TestSuiteDetailPage() {
 
   const loadRuns = useCallback(() => {
     api.get<TestRun[]>(`/test-suites/${id}/runs`).then(setRuns).catch(() => {});
+    api.get<SuiteStats>(`/test-suites/${id}/stats`).then(setStats).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -106,6 +116,16 @@ export default function TestSuiteDetailPage() {
         {suite?.config_yaml}
       </pre>
 
+      {/* Performans (kalıcı: tamamlanmış run'lardan) */}
+      {stats && stats.completed_runs > 0 && (
+        <>
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Performans · {stats.completed_runs} tamamlanan run
+          </h2>
+          <PerformancePanel stats={stats} />
+        </>
+      )}
+
       {/* Runs */}
       <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         Runs
@@ -141,6 +161,83 @@ export default function TestSuiteDetailPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Performans paneli (kalıcı: tamamlanmış run özetlerinden) ──
+
+function fmtPct(v: number | null): string {
+  return v == null ? "—" : `${Math.round(v * 100)}%`;
+}
+
+function fmtUsd(v: number | null): string {
+  if (v == null) return "—";
+  return `$${v < 0.01 ? v.toFixed(5) : v.toFixed(4)}`;
+}
+
+function PerformancePanel({ stats }: { stats: SuiteStats }) {
+  return (
+    <div className="mb-8 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Kpi label="Başarılı run" value={fmtPct(stats.success_run_rate)} hint="tüm case'leri geçen" accent />
+        <Kpi label="Ort. geçme oranı" value={fmtPct(stats.avg_pass_rate)} hint="case düzeyi" />
+        <Kpi
+          label="Ort. cevap süresi"
+          value={stats.avg_latency_ms != null ? `${(stats.avg_latency_ms / 1000).toFixed(2)}s` : "—"}
+          hint="run ortalaması"
+        />
+        <Kpi label="Ort. maliyet" value={fmtUsd(stats.avg_cost_usd)} hint="run başına" />
+      </div>
+      {stats.trend.length > 1 && (
+        <div className="mt-4">
+          <p className="mb-1.5 text-[11px] text-zinc-600">Geçme oranı trendi (eski → yeni)</p>
+          <PassRateTrend trend={stats.trend} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+      <p className="text-[10px] uppercase tracking-wide text-zinc-600">{label}</p>
+      <p className={cn("mt-0.5 text-lg font-semibold", accent ? "text-green-400" : "text-zinc-100")}>
+        {value}
+      </p>
+      {hint && <p className="text-[10px] text-zinc-700">{hint}</p>}
+    </div>
+  );
+}
+
+function PassRateTrend({ trend }: { trend: SuiteTrendPoint[] }) {
+  const last = trend.slice(-30);
+  return (
+    <div className="flex h-16 items-end gap-1">
+      {last.map((p) => {
+        const r = p.pass_rate ?? 0;
+        const color = r >= 0.99 ? "bg-green-500/70" : r >= 0.6 ? "bg-amber-500/70" : "bg-red-500/70";
+        const lat = p.avg_latency_ms != null ? ` · ${(p.avg_latency_ms / 1000).toFixed(2)}s` : "";
+        return (
+          <div
+            key={p.run_id}
+            title={`${new Date(p.created_at).toLocaleString()} · ${Math.round(r * 100)}%${lat}`}
+            className={cn("min-w-[6px] flex-1 rounded-sm", color)}
+            style={{ height: `${Math.max(6, r * 100)}%` }}
+          />
+        );
+      })}
     </div>
   );
 }

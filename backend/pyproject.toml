@@ -51,6 +51,9 @@ dependencies = [
     # M12: Research agent
     "tavily-python>=0.7.0",
     "trafilatura>=2.0.0",
+
+    # F1.2: Excel export (test sonuçları)
+    "openpyxl>=3.1.0",
 ]
 
 [project.optional-dependencies]

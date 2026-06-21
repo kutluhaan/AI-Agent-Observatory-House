@@ -120,7 +120,7 @@ export default function NewTestSuitePage() {
           onChange={(e) => setConfigYaml(e.target.value)}
           rows={14}
           className="font-mono text-xs"
-          hint="agent_id'yi gerçek agent'a ayarla. Assertion'lar (deterministik) — çıktı: response_contains/not_contains/equals/regex · tool: tool_called/with_args/sequence/tools_used/no_tool_errors · güvenlik: no_pii/not_refused · bütçe: steps/tokens/cost/latency_under. judges (opsiyonel, token harcar): task_completion/answer_correctness/rubric/step_efficiency/argument_correctness/reasoning_quality/safety. Tutarlılık: repeat + min_pass_rate."
+          hint="agent_id'yi gerçek agent'a ayarla. Assertion'lar (deterministik) — çıktı: response_contains/not_contains/equals/regex · tool: tool_called/with_args/sequence/tools_used/tool_correctness/no_tool_errors · güvenlik: no_pii/not_refused · bütçe: steps/tokens/cost/latency_under. judges (opsiyonel, token harcar): task_completion/answer_correctness/rubric/step_efficiency/argument_correctness/reasoning_quality/safety. Tutarlılık: repeat + min_pass_rate."
           required
         />
 

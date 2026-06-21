@@ -282,13 +282,18 @@ async def test_list_available_tools(owner_client):
     assert resp.status_code == 200
     data = assert_success(resp.json())
     tool_names = [t["name"] for t in data]
-    assert "echo" in tool_names
-    assert "calculator" in tool_names
-    assert "call_agent" in tool_names
-    # Her tool'un description ve parameters alanı olmalı
+    # Seçilebilir tool'lar görünür (web/self kategorileri)
+    assert "web_search" in tool_names
+    assert "think" in tool_names
+    # F2: internal tool'lar gizli (kayıtlı ama listede yok)
+    assert "echo" not in tool_names
+    assert "calculator" not in tool_names
+    assert "call_agent" not in tool_names
+    # Her tool'un description, parameters ve category alanı olmalı
     for tool in data:
         assert "description" in tool
         assert "parameters" in tool
+        assert "category" in tool
 
 
 # ─── /run — sync (stream=false) ───────────────────────────

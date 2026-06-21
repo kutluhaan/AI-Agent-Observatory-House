@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Activity, CheckCircle2, XCircle, Wrench, AlertTriangle, Gavel } from "lucide-react";
+import { ArrowLeft, Activity, CheckCircle2, XCircle, Wrench, AlertTriangle, Gavel, Download } from "lucide-react";
 import {
   api,
   type TestRunDetail,
@@ -24,6 +24,21 @@ function fmtCost(c: number | null | undefined): string | null {
   if (c === 0) return "$0";
   if (c < 0.01) return `$${c.toFixed(5)}`;
   return `$${c.toFixed(4)}`;
+}
+
+async function downloadXlsx(runId: string) {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const res = await fetch(`${base}/test-runs/${runId}/export.xlsx`, {
+    credentials: "include",
+  });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `test-run-${runId.slice(0, 8)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 const JUDGE_LABELS: Record<string, string> = {
@@ -121,6 +136,15 @@ export default function TestRunDetailPage() {
             <Spinner className="h-3 w-3" />
             running…
           </span>
+        )}
+        {!live && case_results.length > 0 && (
+          <button
+            onClick={() => void downloadXlsx(id)}
+            className="ml-auto flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+          >
+            <Download size={13} />
+            Excel&apos;e aktar
+          </button>
         )}
       </div>
 

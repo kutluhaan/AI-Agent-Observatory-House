@@ -297,6 +297,25 @@ async def list_suite_runs(
     return success([TestRunResponse.from_orm(r).model_dump() for r in runs])
 
 
+@router.get("/{suite_id}/stats")
+async def get_suite_stats(
+    suite_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Suite'in tamamlanmış run'larından KPI'lar + trend (F1.3). Kalıcı veriden."""
+    from app.services.test_suite.suite_stats import compute_suite_stats
+
+    await _get_suite_or_404(suite_id, ctx.org_id, db)  # type: ignore[arg-type]
+    runs = (await db.execute(
+        select(TestRun).where(
+            TestRun.suite_id == suite_id,
+            TestRun.organization_id == ctx.org_id,
+        )
+    )).scalars().all()
+    return success(compute_suite_stats(list(runs)))
+
+
 # ─── Test Run detail (ayrı prefix /test-runs altında) ─────
 
 test_runs_router = APIRouter()
@@ -320,4 +339,36 @@ async def get_test_run(
             run=TestRunResponse.from_orm(run),
             case_results=[TestCaseResultResponse.from_orm(r) for r in case_results],
         ).model_dump()
+    )
+
+
+@test_runs_router.get("/{run_id}/export.xlsx")
+async def export_test_run_xlsx(
+    run_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Test run sonuçlarını Excel (.xlsx) olarak indir (F1.2)."""
+    from fastapi.responses import Response
+    from app.services.test_suite.excel_export import build_workbook
+
+    run = await _get_run_or_404(run_id, ctx.org_id, db)  # type: ignore[arg-type]
+    case_results = (await db.execute(
+        select(TestCaseResult).where(TestCaseResult.run_id == run_id)
+    )).scalars().all()
+
+    case_ids = [r.case_id for r in case_results]
+    names: dict[str, str] = {}
+    if case_ids:
+        rows = (await db.execute(
+            select(TestCase.id, TestCase.name).where(TestCase.id.in_(case_ids))
+        )).all()
+        names = {str(cid): name for cid, name in rows}
+
+    content = build_workbook(run, list(case_results), names)
+    filename = f"test-run-{str(run_id)[:8]}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

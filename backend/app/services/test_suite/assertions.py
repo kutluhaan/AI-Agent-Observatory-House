@@ -79,6 +79,7 @@ def evaluate(
         "tool_called_with_args": _tool_called_with_args,
         "tool_sequence": _tool_sequence,
         "tools_used": _tools_used,
+        "tool_correctness": _tool_correctness,
         "no_tool_errors": _no_tool_errors,
         "latency_under": _latency_under,
         "finish_reason_is": _finish_reason_is,
@@ -270,6 +271,72 @@ def _tools_used(value: Any, result: SandboxResult) -> AssertionResult:
         expected=sorted(want),
         actual=sorted(used),
         message="OK" if passed else f"Eksik tool'lar: {sorted(missing)}",
+    )
+
+
+def _tool_correctness(value: Any, result: SandboxResult) -> AssertionResult:
+    """Beklenen tool çağrılarını gerçek trajectory ile katmanlı sıkılıkta kıyaslar,
+    0–1 skor üretir. value: {expected: [...], strictness: name|args|order, threshold}."""
+    cfg = value if isinstance(value, dict) else {}
+    strictness = cfg.get("strictness", "name")
+    threshold = float(cfg.get("threshold", 1.0))
+
+    expected: list[dict] = []
+    for e in cfg.get("expected", []) or []:
+        if isinstance(e, str):
+            expected.append({"name": e, "args": {}})
+        elif isinstance(e, dict):
+            expected.append({"name": e.get("name"), "args": e.get("args") or {}})
+    total = len(expected)
+    if total == 0:
+        return AssertionResult(
+            type="tool_correctness", passed=True, expected=cfg,
+            actual={"score": 1.0}, message="Beklenen tool tanımlanmadı.",
+        )
+
+    traj = result.trajectory
+    matched: list[str] = []
+    missing: list[str] = []
+
+    if strictness == "order":
+        names = [c.get("name") for c in traj]
+        i = 0
+        for e in expected:
+            j = i
+            while j < len(names) and names[j] != e["name"]:
+                j += 1
+            if j < len(names):
+                matched.append(e["name"])
+                i = j + 1
+            else:
+                missing.append(e["name"])
+    else:
+        for e in expected:
+            ok = False
+            for c in traj:
+                if c.get("name") != e["name"]:
+                    continue
+                if strictness == "args":
+                    cargs = c.get("arguments") or {}
+                    if all(str(cargs.get(k)) == str(v) for k, v in (e["args"] or {}).items()):
+                        ok = True
+                        break
+                else:  # name
+                    ok = True
+                    break
+            (matched if ok else missing).append(e["name"])
+
+    score = round(len(matched) / total, 4)
+    passed = score >= threshold
+    msg = f"Tool doğruluğu: {round(score * 100)}% ({len(matched)}/{total})"
+    if not passed:
+        msg += f" — eksik/yanlış: {missing}"
+    return AssertionResult(
+        type="tool_correctness",
+        passed=passed,
+        expected=cfg,
+        actual={"score": score, "matched": matched, "missing": missing, "strictness": strictness},
+        message=msg,
     )
 
 

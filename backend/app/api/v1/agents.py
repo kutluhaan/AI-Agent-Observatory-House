@@ -271,19 +271,35 @@ async def list_agents(
 async def list_available_tools(
     ctx: TenantContext = Depends(require_role("member")),
 ):
-    """Kayıtlı tool isimlerini listeler. File tool'ları hariç — dosya sistemi
-    açılınca otomatik eklenirler, tek tek seçilmezler."""
+    """Seçilebilir tool'ları listeler (kategori bilgisiyle). File/skill tool'ları
+    auto-managed; internal tool'lar (echo/calculator vb.) gizli — hariç tutulur."""
+    from app.services.agent.tool_categories import INTERNAL_TOOLS, category_of
+
     tools = []
     for name in ToolRegistry.all_names():
-        if name in FILE_TOOL_NAMES or name in SKILL_TOOL_NAMES:
+        if name in FILE_TOOL_NAMES or name in SKILL_TOOL_NAMES or name in INTERNAL_TOOLS:
             continue
         handler = ToolRegistry.get(name)
         tools.append({
             "name": handler.name,
             "description": handler.description,
             "parameters": handler.parameters,
+            "category": category_of(name),
         })
     return success(tools)
+
+
+@router.get("/tool-categories")
+async def list_tool_categories(
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Tool'ları kategoriler halinde döner (F2): file/web/self/finance/operation.
+
+    Her kategori: {key, label, note, managed_by_file_system, coming_soon, tools[]}.
+    """
+    from app.services.agent.tool_categories import build_categories
+
+    return success(build_categories())
 
 
 @router.get("/{agent_id}")
