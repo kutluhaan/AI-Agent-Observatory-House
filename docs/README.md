@@ -13,7 +13,7 @@ belgelenir.
 | F3 | Self-hosted / OpenAI-uyumlu custom model | ✅ |
 | F4 | Test derinliği (prompt override + A/B, çıktı kalitesi, KPI tablosu) | ✅ |
 | F5 | Dashboard & rapor & bilgi-etkisi gözlemi | ✅ |
-| F6 | Senaryo tabanlı çalıştırma (çok-adımlı + kontrol noktaları) | ⏳ |
+| F6 | Senaryo tabanlı çalıştırma (çok-adımlı + kontrol noktaları) | ✅ |
 | F7 | MCP server + custom agent HTTP invoke | ⏳ |
 | F8 | Agent ekipleri (çok-agent işbirliği) | ⏳ |
 
@@ -25,6 +25,7 @@ belgelenir.
 - [Suite KPI'ları](test-suite/suite-kpis.md) — başarı oranı + cevap süresi performans paneli
 - [Çıktı kalitesi](test-suite/output-quality.md) — bileşik `output_quality` judge'ı (F4.1)
 - [A/B prompt deneyleri](test-suite/ab-prompt-experiments.md) — system prompt varyantlarını yan yana karşılaştır (F4.3)
+- [Senaryo testleri](test-suite/scenario-runs.md) — çok-turlu görev + adım checkpoint'leri (F6)
 
 ### Ajan & Araçlar
 - [Tool kategorileri](features/tool-categories.md) — file/web/finance/operation/self; kategori bazlı seçim
