@@ -35,6 +35,7 @@ belgelenir.
 - [MCP server entegrasyonu](features/mcp-integration.md) — dış MCP tool'larını agent'a bağla (F7.2)
 - [Agent ekipleri](features/agent-teams.md) — rollü çok-agent işbirliği (delegasyon + paylaşılan pano) (F8)
 - [Gmail entegrasyonu](features/gmail-integration.md) — kullanıcı OAuth + gmail ara/oku/gönder tool'ları (G1)
+- [Gmail kurulum kılavuzu](features/gmail-setup-guide.md) — adım adım Google Cloud + bağlama + sorun giderme (G1)
 - [Agent performans paneli](features/agent-performance-panel.md) — agent başına birleşik test performansı (F5.1)
 - [Org dashboard & bilgi-etkisi](features/org-dashboard.md) — org özeti + agent sıralaması + RAG trendi (F5.2/F5.3)
 
