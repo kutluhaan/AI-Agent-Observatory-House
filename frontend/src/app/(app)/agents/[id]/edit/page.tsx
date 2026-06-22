@@ -57,6 +57,7 @@ export default function EditAgentPage() {
             hitl_tool_names: agent.hitl_tool_names,
             file_system_enabled: agent.file_system_enabled,
             endpoint_url: agent.endpoint_url,
+            mcp_tools: agent.mcp_tools,
           }}
           submitLabel="Değişiklikleri kaydet"
           onSubmit={handleSave}

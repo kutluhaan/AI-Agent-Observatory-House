@@ -37,6 +37,7 @@ from app.services.providers.base import (
     BaseLLMProvider,
     Message,
     ProviderError,
+    ToolDefinition,
 )
 from app.services.trace_collector import Tracer
 
@@ -84,6 +85,7 @@ class AgentRunner(BaseAgent):
         hitl: Any | None = None,         # HITLEngine — Any ile circular import önlenir
         ws_manager: Any | None = None,   # ConnectionManager
         history: list[Message] | None = None,  # Önceki thread mesajları (çok-turlu hafıza)
+        mcp_tools: list[dict] | None = None,  # F7.2: çözümlenmiş MCP tool'ları [{name, description, input_schema, url, api_key}]
     ) -> None:
         super().__init__(config)
         self.provider = provider
@@ -92,6 +94,9 @@ class AgentRunner(BaseAgent):
         self.hitl = hitl
         self.ws_manager = ws_manager
         self.history = history or []
+        # F7.2: MCP tool'ları "mcp__{name}" olarak sunulur (native tool'larla çakışmaz)
+        self._mcp_tools = mcp_tools or []
+        self._mcp_by_name = {f"mcp__{t['name']}": t for t in self._mcp_tools}
 
     # ─── Public API ───────────────────────────────────────
 
@@ -129,7 +134,7 @@ class AgentRunner(BaseAgent):
         Tool call sırasında stream'i duraklatan ve devam ettiren döngü.
         """
         messages = self._build_messages(user_input)
-        tool_defs = ToolRegistry.build_definitions(self.config.tool_names)
+        tool_defs = ToolRegistry.build_definitions(self.config.tool_names) + self._mcp_definitions()
         step = 0
         total_usage: dict[str, int] = {}
 
@@ -397,7 +402,7 @@ class AgentRunner(BaseAgent):
     async def _execute(self, user_input: str) -> AgentResult:
         """Blocking execution loop (run() tarafından kullanılır)."""
         messages = self._build_messages(user_input)
-        tool_defs = ToolRegistry.build_definitions(self.config.tool_names)
+        tool_defs = ToolRegistry.build_definitions(self.config.tool_names) + self._mcp_definitions()
         step = 0
         total_usage: dict[str, int] = {}
 
@@ -586,17 +591,22 @@ class AgentRunner(BaseAgent):
         })
         return answer
 
+    def _mcp_definitions(self) -> list[ToolDefinition]:
+        """F7.2: çözümlenmiş MCP tool'larını ToolDefinition'a çevirir (mcp__ önekli)."""
+        return [
+            ToolDefinition(
+                name=f"mcp__{t['name']}",
+                description=t.get("description") or f"MCP tool: {t['name']}",
+                parameters=t.get("input_schema") or {"type": "object", "properties": {}},
+            )
+            for t in self._mcp_tools
+        ]
+
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any] | str) -> str:
         """Tool handler'ı çalıştırır, hataları AgentToolError'a çevirir.
 
         arguments: OpenAI JSON string döndürür, Anthropic dict döndürür — her ikisini normalize eder.
         """
-        try:
-            handler = ToolRegistry.get(tool_name)
-        except KeyError:
-            await self._emit_error("AGENT_TOOL_ERROR", f"Unknown tool: '{tool_name}'")
-            raise AgentToolError(f"Unknown tool: '{tool_name}'")
-
         # OpenAI complete() tool çağrılarında arguments JSON string olarak gelir
         if isinstance(arguments, str):
             try:
@@ -604,6 +614,22 @@ class AgentRunner(BaseAgent):
             except json.JSONDecodeError as exc:
                 logger.warning("agent.tool_error.invalid_json", tool=tool_name, raw=arguments)
                 return f"[Tool error: invalid JSON arguments — {exc}]"
+
+        # F7.2: MCP tool'u mu? (mcp__ önekli) → uzak sunucuya yönlendir
+        mcp = self._mcp_by_name.get(tool_name)
+        if mcp is not None:
+            from app.services.mcp.client import call_mcp_tool
+            try:
+                return await call_mcp_tool(mcp["url"], mcp.get("api_key"), mcp["name"], arguments)
+            except Exception as exc:
+                logger.warning("agent.mcp_tool_error", tool=tool_name, error=str(exc))
+                return f"[MCP tool error: {exc}]"
+
+        try:
+            handler = ToolRegistry.get(tool_name)
+        except KeyError:
+            await self._emit_error("AGENT_TOOL_ERROR", f"Unknown tool: '{tool_name}'")
+            raise AgentToolError(f"Unknown tool: '{tool_name}'")
 
         ctx = self.tool_context or ToolContext(
             org_id=self.config.org_id,

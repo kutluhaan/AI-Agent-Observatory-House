@@ -54,6 +54,9 @@ dependencies = [
 
     # F1.2: Excel export (test sonuçları)
     "openpyxl>=3.1.0",
+
+    # F7.2: MCP (Model Context Protocol) — dış tool sunucuları, Streamable HTTP
+    "mcp>=1.2.0",
 ]
 
 [project.optional-dependencies]

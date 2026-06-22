@@ -102,7 +102,11 @@ async def run_case(
         hitl_tool_names=[],  # Test sırasında HITL devre dışı
     )
 
-    sandbox = AgentSandbox(config=config, provider=provider, redis=redis, db=db)
+    # F7.2: agent'ın MCP tool'larını çözümle
+    from app.services.mcp.resolver import resolve_agent_mcp_tools
+    mcp_tools = await resolve_agent_mcp_tools(db, agent_row)
+
+    sandbox = AgentSandbox(config=config, provider=provider, redis=redis, db=db, mcp_tools=mcp_tools)
 
     # F6: senaryo modu — case'in steps'i varsa çok-turlu çalıştır (checkpoint'ler)
     if getattr(case, "steps", None):

@@ -10,7 +10,7 @@ import {
   TrendingUp,
   Briefcase,
 } from "lucide-react";
-import { api, ApiError, type ToolCategory } from "@/lib/api";
+import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +56,7 @@ export interface AgentFormValues {
   file_system_enabled: boolean;
   endpoint_url?: string | null;
   endpoint_api_key?: string | null;
+  mcp_tools?: AgentMcpTool[] | null;
 }
 
 export function AgentForm({
@@ -78,12 +79,28 @@ export function AgentForm({
   const [fileSystem, setFileSystem] = useState(initial?.file_system_enabled ?? false);
   const [endpointUrl, setEndpointUrl] = useState(initial?.endpoint_url ?? "");
   const [endpointApiKey, setEndpointApiKey] = useState("");
+  // F7.2: MCP — sunucular + seçili tool'lar (key: `${server_id}:${tool_name}`)
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [mcpSelected, setMcpSelected] = useState<Map<string, AgentMcpTool>>(
+    new Map((initial?.mcp_tools ?? []).map((t) => [`${t.server_id}:${t.tool_name}`, t])),
+  );
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.get<ToolCategory[]>("/agents/tool-categories").then(setCategories).catch(() => {});
+    api.get<McpServer[]>("/mcp-servers").then(setMcpServers).catch(() => {});
   }, []);
+
+  function toggleMcpTool(serverId: string, tool: McpToolInfo) {
+    const key = `${serverId}:${tool.name}`;
+    setMcpSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(key)) next.delete(key);
+      else next.set(key, { server_id: serverId, tool_name: tool.name, description: tool.description, input_schema: tool.input_schema });
+      return next;
+    });
+  }
 
   function toggleTool(toolName: string) {
     setSelected((prev) => {
@@ -143,6 +160,8 @@ export function AgentForm({
         // F7.1: http agent endpoint (yalnız http için anlamlı). Key boşsa gönderme (mevcut korunur).
         endpoint_url: provider === "http" ? endpointUrl : null,
         ...(endpointApiKey ? { endpoint_api_key: endpointApiKey } : {}),
+        // F7.2: seçili MCP tool'ları
+        mcp_tools: mcpSelected.size > 0 ? Array.from(mcpSelected.values()) : null,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "İşlem başarısız oldu.");
@@ -224,6 +243,25 @@ export function AgentForm({
           </p>
         </div>
       )}
+
+      {/* F7.2: MCP tool'ları */}
+      {mcpServers.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-zinc-300">
+            MCP tool&apos;ları{" "}
+            {mcpSelected.size > 0 && <span className="text-indigo-400">({mcpSelected.size} seçili)</span>}
+          </p>
+          {mcpServers.map((s) => (
+            <McpServerTools
+              key={s.id}
+              server={s}
+              isSelected={(tool) => mcpSelected.has(`${s.id}:${tool}`)}
+              onToggle={(tool) => toggleMcpTool(s.id, tool)}
+            />
+          ))}
+        </div>
+      )}
+
       {provider === "custom" && (
         <p className="-mt-2 text-xs text-zinc-500">
           Endpoint URL&apos;ini <code className="text-indigo-300">.env</code>&apos;deki{" "}
@@ -371,5 +409,67 @@ export function AgentForm({
         {submitLabel}
       </Button>
     </form>
+  );
+}
+
+// F7.2 — bir MCP sunucusunun tool'larını keşfedip seçtiren alt-bileşen
+function McpServerTools({
+  server,
+  isSelected,
+  onToggle,
+}: {
+  server: McpServer;
+  isSelected: (tool: string) => boolean;
+  onToggle: (tool: McpToolInfo) => void;
+}) {
+  const [tools, setTools] = useState<McpToolInfo[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function discover() {
+    setLoading(true);
+    setErr("");
+    try {
+      setTools(await api.get<McpToolInfo[]>(`/mcp-servers/${server.id}/tools`));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Bağlanılamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-xs text-zinc-300">{server.name}</span>
+        <button
+          type="button"
+          onClick={discover}
+          className="text-[11px] text-indigo-400 hover:text-indigo-300"
+        >
+          {loading ? "..." : tools ? "yenile" : "tool'ları getir"}
+        </button>
+      </div>
+      {err && <p className="mt-1 text-[11px] text-red-400">{err}</p>}
+      {tools && tools.length === 0 && <p className="mt-1 text-[11px] text-zinc-600">tool yok</p>}
+      {tools && tools.length > 0 && (
+        <div className="mt-2 flex flex-col gap-1">
+          {tools.map((t) => (
+            <label key={t.name} className="flex cursor-pointer items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={isSelected(t.name)}
+                onChange={() => onToggle(t)}
+                className="mt-0.5 accent-indigo-500"
+              />
+              <span>
+                <span className="font-mono text-zinc-300">{t.name}</span>
+                {t.description && <span className="block text-[10px] text-zinc-600">{t.description}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

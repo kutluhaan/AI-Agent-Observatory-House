@@ -90,6 +90,7 @@ def test_all_tables_registered():
         "conversation_messages",
         "agent_files",
         "agent_knowledge",
+        "mcp_servers",
     }
     registered = set(Base.metadata.tables.keys())
     assert expected_tables == registered, f"Eksik tablolar: {expected_tables - registered}"

@@ -71,6 +71,9 @@ class Agent(Base):
     # HITL için insan onayı gerektiren tool isimleri (tool_names alt kümesi)
     hitl_tool_names: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
+    # F7.2: bu agent'ın kullanabileceği MCP tool'ları [{server_id, tool_name}]
+    mcp_tools: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
     # İzole dosya sistemi açık mı — açıksa file tool'ları otomatik eklenir
     file_system_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

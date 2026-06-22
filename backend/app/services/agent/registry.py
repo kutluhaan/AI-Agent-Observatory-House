@@ -26,6 +26,10 @@ class ToolContext:
     db: Any  # AsyncSession — circular import'u önlemek için Any
     redis: Any  # aioredis.Redis
     agent_id: uuid.UUID | None = None
+    # F8: ekip bağlamı — team tool'ları (delegate/team_share/team_board) bunu kullanır
+    team_id: uuid.UUID | None = None
+    team_run_id: uuid.UUID | None = None
+    current_role: str | None = None
 
 
 @dataclass

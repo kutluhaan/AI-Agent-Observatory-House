@@ -180,6 +180,9 @@ app.include_router(test_runs_ws_router, prefix="/ws", tags=["ws"])
 from app.api.v1.dashboard import router as dashboard_router
 app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 
+from app.api.v1.mcp_servers import router as mcp_servers_router
+app.include_router(mcp_servers_router, prefix="/mcp-servers", tags=["mcp"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])

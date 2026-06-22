@@ -153,6 +153,10 @@ async def _build_runner(
     except AppError:
         raise
 
+    # F7.2: agent'ın MCP tool'larını çözümle (uzak sunucu URL/key dahil)
+    from app.services.mcp.resolver import resolve_agent_mcp_tools
+    mcp_tools = await resolve_agent_mcp_tools(db, agent)
+
     tracer = Tracer(
         redis=redis,
         organization_id=str(ctx.org_id),
@@ -181,6 +185,7 @@ async def _build_runner(
         hitl=hitl,
         ws_manager=ws_manager,
         history=history,
+        mcp_tools=mcp_tools,
     )
 
 
@@ -246,6 +251,7 @@ async def create_agent(
         is_active=True,
         endpoint_url=(body.endpoint_url or None),
         endpoint_api_key=encrypt_value(body.endpoint_api_key) if body.endpoint_api_key else None,
+        mcp_tools=body.mcp_tools or None,
     )
     db.add(agent)
     await db.commit()
@@ -430,7 +436,7 @@ async def update_agent(
     # description and max_tokens are nullable columns — allow explicit null.
     # All other Agent columns are NOT NULL; silently skip null values here so
     # a PATCH with {"name": null} doesn't crash the DB with a constraint error.
-    _NULLABLE_FIELDS = {"description", "max_tokens", "endpoint_url"}
+    _NULLABLE_FIELDS = {"description", "max_tokens", "endpoint_url", "mcp_tools"}
     update_fields = body.model_dump(exclude_unset=True)
     # F7.1: endpoint_api_key özel — şifrele; boş/None → temizle
     if "endpoint_api_key" in update_fields:

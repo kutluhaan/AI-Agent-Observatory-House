@@ -19,6 +19,8 @@ from app.models.test_suite import TestSuite, TestCase, TestRun, TestCaseResult
 from app.models.conversation import Conversation, ConversationMessage
 from app.models.agent_file import AgentFile
 from app.models.agent_knowledge import AgentKnowledge
+from app.models.mcp import McpServer
+from app.models.team import Team, TeamMember, TeamRun, TeamRunMessage
 
 __all__ = [
     "User",
@@ -39,4 +41,9 @@ __all__ = [
     "ConversationMessage",
     "AgentFile",
     "AgentKnowledge",
+    "McpServer",
+    "Team",
+    "TeamMember",
+    "TeamRun",
+    "TeamRunMessage",
 ]
