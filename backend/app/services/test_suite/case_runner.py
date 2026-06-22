@@ -84,11 +84,14 @@ async def run_case(
             error_message=f"Provider yüklenemedi: {exc}",
         )
 
+    # F4.3: A/B — run'a system_prompt_override varsa agent'ınkini geçici ezer (kalıcı değil)
+    system_prompt = getattr(run, "system_prompt_override", None) or agent_row.system_prompt
+
     config = AgentConfig(
         agent_id=agent_row.id,
         org_id=run.organization_id,
         name=agent_row.name,
-        system_prompt=agent_row.system_prompt,
+        system_prompt=system_prompt,
         provider=agent_row.provider,
         model=agent_row.model,
         temperature=agent_row.temperature,

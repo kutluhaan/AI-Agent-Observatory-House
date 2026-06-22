@@ -28,6 +28,9 @@ from app.core.responses import AppError, NotFoundError, success
 from app.models.test_suite import TestCase, TestCaseResult, TestRun, TestSuite
 from app.schemas.test_suites import (
     CreateTestSuiteRequest,
+    ExperimentResponse,
+    ExperimentVariantResult,
+    RunExperimentRequest,
     RunTestSuiteRequest,
     TestCaseResultResponse,
     TestRunDetailResponse,
@@ -288,6 +291,140 @@ async def run_test_suite(
     background_tasks.add_task(experiment.run)
 
     return success(TestRunResponse.from_orm(run).model_dump())
+
+
+# ─── A/B Prompt Experiments (F4.3) ────────────────────────
+
+def _experiment_status(runs: list[TestRun]) -> str:
+    """Tüm varyantlar bittiyse 'completed', biri hata verdiyse de bitmiş sayılır."""
+    if all(r.status in ("completed", "failed") for r in runs):
+        return "completed"
+    return "running"
+
+
+@router.post("/{suite_id}/experiments", status_code=202)
+async def run_experiment(
+    suite_id: uuid.UUID,
+    body: RunExperimentRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """A/B: aynı suite'i her varyantın system prompt'uyla ayrı çalıştırır.
+
+    Her varyant = ortak experiment_id'li bir TestRun (system_prompt_override ile).
+    Override agent'ı kalıcı bozmaz. Sonuçlar yan yana karşılaştırılır.
+    """
+    suite = await _get_suite_or_404(suite_id, ctx.org_id, db)  # type: ignore[arg-type]
+
+    experiment_id = uuid.uuid4()
+    runs: list[TestRun] = []
+    for variant in body.variants:
+        run = TestRun(
+            id=uuid.uuid4(),
+            suite_id=suite.id,
+            organization_id=ctx.org_id,
+            status="pending",
+            parallel=body.parallel,
+            experiment_id=experiment_id,
+            variant_label=variant.label,
+            system_prompt_override=variant.system_prompt,
+            created_at=datetime.now(UTC),
+        )
+        db.add(run)
+        runs.append(run)
+    await db.commit()
+    for run in runs:
+        await db.refresh(run)
+
+    # Her varyant için arka plan runner'ı başlat
+    for run in runs:
+        runner = ExperimentRunner(
+            run_id=run.id,
+            db_factory=AsyncSessionLocal,
+            redis=redis,
+            ws_manager=ws_manager,
+        )
+        background_tasks.add_task(runner.run)
+
+    return success(_build_experiment_response(experiment_id, suite_id, runs).model_dump())
+
+
+@router.get("/{suite_id}/experiments")
+async def list_experiments(
+    suite_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Suite'in A/B deneylerini (experiment_id'ye göre gruplu) listeler — kalıcı."""
+    await _get_suite_or_404(suite_id, ctx.org_id, db)  # type: ignore[arg-type]
+    rows = (await db.execute(
+        select(TestRun).where(
+            TestRun.suite_id == suite_id,
+            TestRun.organization_id == ctx.org_id,
+            TestRun.experiment_id.is_not(None),
+        ).order_by(TestRun.created_at.desc())
+    )).scalars().all()
+
+    grouped: dict[uuid.UUID, list[TestRun]] = {}
+    for r in rows:
+        grouped.setdefault(r.experiment_id, []).append(r)
+
+    experiments = [
+        _build_experiment_response(exp_id, suite_id, group).model_dump()
+        for exp_id, group in grouped.items()
+    ]
+    # En yeni deney önce (grubun ilk run'ının created_at'ine göre)
+    experiments.sort(key=lambda e: e["created_at"], reverse=True)
+    return success(experiments)
+
+
+@router.get("/{suite_id}/experiments/{experiment_id}")
+async def get_experiment(
+    suite_id: uuid.UUID,
+    experiment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """Tek bir A/B deneyinin varyant run'ları + özetleri (yan yana karşılaştırma)."""
+    await _get_suite_or_404(suite_id, ctx.org_id, db)  # type: ignore[arg-type]
+    runs = (await db.execute(
+        select(TestRun).where(
+            TestRun.suite_id == suite_id,
+            TestRun.organization_id == ctx.org_id,
+            TestRun.experiment_id == experiment_id,
+        ).order_by(TestRun.created_at.asc())
+    )).scalars().all()
+
+    if not runs:
+        raise NotFoundError("EXPERIMENT_NOT_FOUND", "Experiment not found.")
+
+    return success(_build_experiment_response(experiment_id, suite_id, list(runs)).model_dump())
+
+
+def _build_experiment_response(
+    experiment_id: uuid.UUID,
+    suite_id: uuid.UUID,
+    runs: list[TestRun],
+) -> ExperimentResponse:
+    ordered = sorted(runs, key=lambda r: r.created_at)
+    return ExperimentResponse(
+        experiment_id=experiment_id,
+        suite_id=suite_id,
+        created_at=ordered[0].created_at.isoformat(),
+        status=_experiment_status(ordered),
+        variants=[
+            ExperimentVariantResult(
+                run_id=r.id,
+                variant_label=r.variant_label,
+                status=r.status,
+                summary=r.summary,
+                system_prompt_override=r.system_prompt_override,
+            )
+            for r in ordered
+        ],
+    )
 
 
 @router.get("/{suite_id}/runs")

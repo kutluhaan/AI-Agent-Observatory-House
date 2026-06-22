@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Play, ChevronRight, SlidersHorizontal, GitCompare, Plus, X } from "lucide-react";
 import {
   api,
   ApiError,
@@ -13,7 +13,11 @@ import {
   type SuiteTrendPoint,
   type KpiCatalog,
   type KpiCatalogItem,
+  type Experiment,
+  type PromptVariant,
 } from "@/lib/api";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
@@ -33,9 +37,19 @@ export default function TestSuiteDetailPage() {
   const [parallel, setParallel] = useState(false);
   const [starting, setStarting] = useState(false);
 
+  // F4.3 — A/B prompt deneyi
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [abOpen, setAbOpen] = useState(false);
+  const [variants, setVariants] = useState<PromptVariant[]>([
+    { label: "A", system_prompt: "" },
+    { label: "B", system_prompt: "" },
+  ]);
+  const [launchingAb, setLaunchingAb] = useState(false);
+
   const loadRuns = useCallback(() => {
     api.get<TestRun[]>(`/test-suites/${id}/runs`).then(setRuns).catch(() => {});
     api.get<SuiteStats>(`/test-suites/${id}/stats`).then(setStats).catch(() => {});
+    api.get<Experiment[]>(`/test-suites/${id}/experiments`).then(setExperiments).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -69,6 +83,27 @@ export default function TestSuiteDetailPage() {
       setStarting(false);
     }
   }
+
+  function setVariant(i: number, patch: Partial<PromptVariant>) {
+    setVariants((vs) => vs.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
+  }
+
+  async function handleRunAb() {
+    setLaunchingAb(true);
+    setError("");
+    try {
+      const exp = await api.post<Experiment>(`/test-suites/${id}/experiments`, {
+        parallel,
+        variants,
+      });
+      router.push(`/test-suites/${id}/experiments/${exp.experiment_id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "A/B deneyi başlatılamadı.");
+      setLaunchingAb(false);
+    }
+  }
+
+  const abValid = variants.length >= 2 && variants.every((v) => v.label.trim() && v.system_prompt.trim());
 
   if (loading) {
     return (
@@ -113,12 +148,77 @@ export default function TestSuiteDetailPage() {
             />
             Parallel
           </label>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAbOpen((o) => !o)}
+          >
+            <GitCompare size={13} />
+            A/B test
+          </Button>
           <Button size="sm" onClick={handleRun} loading={starting}>
             <Play size={13} />
             Run
           </Button>
         </div>
       </div>
+
+      {/* A/B prompt deneyi paneli */}
+      {abOpen && (
+        <div className="mb-8 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+          <p className="mb-1 text-sm font-medium text-zinc-200">A/B prompt karşılaştırması</p>
+          <p className="mb-3 text-xs text-zinc-500">
+            Aynı suite, her varyantın <span className="text-zinc-300">system prompt</span>&apos;uyla
+            ayrı çalışır; sonuçlar yan yana karşılaştırılır. Override agent&apos;ı kalıcı bozmaz.
+          </p>
+          <div className="flex flex-col gap-3">
+            {variants.map((v, i) => (
+              <div key={i} className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <Input
+                    value={v.label}
+                    onChange={(e) => setVariant(i, { label: e.target.value })}
+                    placeholder={`Varyant ${i + 1} adı`}
+                    className="max-w-[200px]"
+                  />
+                  {variants.length > 2 && (
+                    <button
+                      onClick={() => setVariants((vs) => vs.filter((_, idx) => idx !== i))}
+                      className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
+                      title="Varyantı kaldır"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <Textarea
+                  value={v.system_prompt}
+                  onChange={(e) => setVariant(i, { system_prompt: e.target.value })}
+                  rows={3}
+                  placeholder="Bu varyantın system prompt'u…"
+                  className="font-mono text-xs"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            {variants.length < 5 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setVariants((vs) => [...vs, { label: String.fromCharCode(65 + vs.length), system_prompt: "" }])}
+              >
+                <Plus size={13} />
+                Varyant ekle
+              </Button>
+            )}
+            <Button size="sm" onClick={handleRunAb} loading={launchingAb} disabled={!abValid}>
+              <GitCompare size={13} />
+              A/B çalıştır ({variants.length})
+            </Button>
+          </div>
+        </div>
+      )}
 
       {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
@@ -145,6 +245,37 @@ export default function TestSuiteDetailPage() {
         </>
       )}
 
+      {/* A/B Deneyleri (kalıcı) */}
+      {experiments.length > 0 && (
+        <>
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            A/B Deneyleri
+          </h2>
+          <div className="mb-8 overflow-hidden rounded-xl border border-zinc-800/80">
+            {experiments.map((exp, i) => (
+              <Link
+                key={exp.experiment_id}
+                href={`/test-suites/${id}/experiments/${exp.experiment_id}`}
+                className={
+                  "flex items-center gap-4 px-4 py-3 transition-colors hover:bg-zinc-900/60 " +
+                  (i > 0 ? "border-t border-zinc-800/60" : "")
+                }
+              >
+                <GitCompare size={14} className="text-indigo-400" />
+                <span className="flex-1 text-xs text-zinc-400">
+                  {exp.variants.map((v) => v.variant_label).join(" · ")}
+                </span>
+                <Badge variant={exp.status === "completed" ? "green" : "indigo"}>{exp.status}</Badge>
+                <span className="text-[11px] text-zinc-600">
+                  {new Date(exp.created_at).toLocaleString()}
+                </span>
+                <ChevronRight size={14} className="text-zinc-700" />
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* Runs */}
       <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         Runs
@@ -165,6 +296,12 @@ export default function TestSuiteDetailPage() {
               }
             >
               <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
+              {run.variant_label && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-indigo-400">
+                  <GitCompare size={11} />
+                  {run.variant_label}
+                </span>
+              )}
               <span className="flex-1 text-xs text-zinc-500">
                 {run.summary
                   ? `${run.summary.passed}/${run.summary.total} passed`

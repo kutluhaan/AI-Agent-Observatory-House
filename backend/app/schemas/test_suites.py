@@ -70,6 +70,25 @@ class RunTestSuiteRequest(BaseModel):
     parallel: bool = False
 
 
+class PromptVariant(BaseModel):
+    label: Annotated[str, Field(min_length=1, max_length=120)]
+    system_prompt: Annotated[str, Field(min_length=1)]
+
+
+class RunExperimentRequest(BaseModel):
+    """F4.3 A/B: aynı suite'i farklı system prompt'larla yan yana çalıştır."""
+    parallel: bool = False
+    variants: Annotated[list[PromptVariant], Field(min_length=2, max_length=5)]
+
+    @field_validator("variants")
+    @classmethod
+    def _unique_labels(cls, v: list[PromptVariant]) -> list[PromptVariant]:
+        labels = [x.label for x in v]
+        if len(set(labels)) != len(labels):
+            raise ValueError("Variant labels must be unique.")
+        return v
+
+
 class TestRunResponse(BaseModel):
     id: uuid.UUID
     suite_id: uuid.UUID
@@ -78,6 +97,8 @@ class TestRunResponse(BaseModel):
     started_at: str | None
     ended_at: str | None
     summary: dict[str, Any] | None
+    experiment_id: uuid.UUID | None
+    variant_label: str | None
     created_at: str
 
     @classmethod
@@ -90,8 +111,26 @@ class TestRunResponse(BaseModel):
             started_at=obj.started_at.isoformat() if obj.started_at else None,
             ended_at=obj.ended_at.isoformat() if obj.ended_at else None,
             summary=obj.summary,
+            experiment_id=getattr(obj, "experiment_id", None),
+            variant_label=getattr(obj, "variant_label", None),
             created_at=obj.created_at.isoformat(),
         )
+
+
+class ExperimentVariantResult(BaseModel):
+    run_id: uuid.UUID
+    variant_label: str | None
+    status: str
+    summary: dict[str, Any] | None
+    system_prompt_override: str | None
+
+
+class ExperimentResponse(BaseModel):
+    experiment_id: uuid.UUID
+    suite_id: uuid.UUID
+    created_at: str
+    status: str  # running | completed (tüm varyantlar bitti)
+    variants: list[ExperimentVariantResult]
 
 
 # ─── TestCaseResult ───────────────────────────────────────

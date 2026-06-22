@@ -152,6 +152,13 @@ class TestRun(Base):
     )
     summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # F4.3: A/B prompt deneyi — aynı experiment_id'li run'lar yan yana karşılaştırılır
+    experiment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    variant_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    system_prompt_override: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

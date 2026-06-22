@@ -321,6 +321,82 @@ async def test_list_suite_runs(owner_client):
     assert len(runs) >= 2
 
 
+# ─── F4.3: A/B Prompt Experiments ─────────────────────────
+
+_VARIANTS = [
+    {"label": "Kısa", "system_prompt": "Be brief."},
+    {"label": "Detaylı", "system_prompt": "Be very detailed."},
+]
+
+
+def _patch_runner():
+    return patch(
+        "app.services.test_suite.experiment_runner.ExperimentRunner.run",
+        new_callable=AsyncMock,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_experiment_creates_variant_runs(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    with _patch_runner():
+        resp = await client.post(f"/test-suites/{suite_id}/experiments", json={"variants": _VARIANTS})
+    assert resp.status_code == 202
+    data = assert_success(resp.json())
+    assert "experiment_id" in data
+    assert len(data["variants"]) == 2
+    assert {v["variant_label"] for v in data["variants"]} == {"Kısa", "Detaylı"}
+    assert all(v["status"] == "pending" for v in data["variants"])
+    assert any(v["system_prompt_override"] == "Be brief." for v in data["variants"])
+
+
+@pytest.mark.asyncio
+async def test_run_experiment_requires_two_variants(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    resp = await client.post(f"/test-suites/{suite_id}/experiments", json={"variants": [_VARIANTS[0]]})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_run_experiment_duplicate_labels_422(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    dup = [{"label": "X", "system_prompt": "a"}, {"label": "X", "system_prompt": "b"}]
+    resp = await client.post(f"/test-suites/{suite_id}/experiments", json={"variants": dup})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_and_get_experiment(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    with _patch_runner():
+        exp = assert_success(
+            (await client.post(f"/test-suites/{suite_id}/experiments", json={"variants": _VARIANTS})).json()
+        )
+    exp_id = exp["experiment_id"]
+
+    listed = assert_success((await client.get(f"/test-suites/{suite_id}/experiments")).json())
+    assert any(e["experiment_id"] == exp_id for e in listed)
+
+    detail = assert_success((await client.get(f"/test-suites/{suite_id}/experiments/{exp_id}")).json())
+    assert detail["experiment_id"] == exp_id
+    assert len(detail["variants"]) == 2
+    # varyant run'ları normal runs listesinde de görünür + variant_label taşır
+    runs = assert_success((await client.get(f"/test-suites/{suite_id}/runs")).json())
+    assert any(r.get("variant_label") == "Kısa" for r in runs)
+
+
+@pytest.mark.asyncio
+async def test_get_experiment_not_found(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    resp = await client.get(f"/test-suites/{suite_id}/experiments/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_other_org_cannot_access_run(owner_client, other_client):
     owner, _, _ = owner_client
