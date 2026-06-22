@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     # M12: Research tools
     tavily_api_key: str = ""
 
+    # G1: Gmail entegrasyonu — Google OAuth (kullanıcı kendi Gmail'ini bağlar)
+    #   Google Cloud Console > OAuth client (Web app)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/connections/google/callback"
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"

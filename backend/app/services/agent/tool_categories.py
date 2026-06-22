@@ -37,6 +37,10 @@ CATEGORY_OF: dict[str, str] = {
     "think": "self",
     "write_todos": "self",
     "ask_user": "self",
+    # G1: Gmail (kullanıcının bağladığı hesapla çalışır)
+    "gmail_search": "email",
+    "gmail_read": "email",
+    "gmail_send": "email",
 }
 
 # Sıralı kategori kataloğu (UI gösterim sırası + etiketler)
@@ -47,9 +51,11 @@ CATEGORIES: list[dict] = [
      "managed_by_file_system": False, "coming_soon": False},
     {"key": "self", "label": "Ajan araçları", "note": "Düşünme, görev listesi, kullanıcıya soru",
      "managed_by_file_system": False, "coming_soon": False},
+    {"key": "email", "label": "E-posta (Gmail)", "note": "Bağlantılar'dan Gmail bağla; oku/ara/gönder",
+     "managed_by_file_system": False, "coming_soon": False},
     {"key": "finance", "label": "Finans", "note": "Yakında",
      "managed_by_file_system": False, "coming_soon": True},
-    {"key": "operation", "label": "Operasyon", "note": "E-posta, dökümanlar — yakında",
+    {"key": "operation", "label": "Operasyon", "note": "Takvim, dökümanlar — yakında",
      "managed_by_file_system": False, "coming_soon": True},
 ]
 

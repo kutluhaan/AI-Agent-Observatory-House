@@ -68,6 +68,9 @@ async def lifespan(app: FastAPI):
     # F8: ekip tool'ları (delegate / team_share / team_board)
     from app.services.agent.tools.team import register_team_tools
     register_team_tools()
+    # G1: Gmail tool'ları (search / read / send)
+    from app.services.agent.tools.gmail import register_gmail_tools
+    register_gmail_tools()
     logger.info("Agent built-in tools registered")
 
     # Faz 3: Dosya sistemi tool'larını kaydet
@@ -189,6 +192,9 @@ app.include_router(mcp_servers_router, prefix="/mcp-servers", tags=["mcp"])
 from app.api.v1.teams import router as teams_router, team_runs_router
 app.include_router(teams_router, prefix="/teams", tags=["teams"])
 app.include_router(team_runs_router, prefix="/team-runs", tags=["teams"])
+
+from app.api.v1.connections import router as connections_router
+app.include_router(connections_router, prefix="/connections", tags=["connections"])
 
 # ─── Health Check ─────────────────────────────────────────
 

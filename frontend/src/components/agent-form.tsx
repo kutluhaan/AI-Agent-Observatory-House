@@ -9,6 +9,7 @@ import {
   Brain,
   TrendingUp,
   Briefcase,
+  ChevronDown,
 } from "lucide-react";
 import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export function AgentForm({
   const [model, setModel] = useState(initial?.model ?? "gemini-2.5-flash");
   const [temperature, setTemperature] = useState(initial?.temperature ?? 0.7);
   const [categories, setCategories] = useState<ToolCategory[]>([]);
+  const [openCats, setOpenCats] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set(initial?.tool_names ?? []));
   const [hitl, setHitl] = useState<Set<string>>(new Set(initial?.hitl_tool_names ?? []));
   const [fileSystem, setFileSystem] = useState(initial?.file_system_enabled ?? false);
@@ -88,9 +90,24 @@ export function AgentForm({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.get<ToolCategory[]>("/agents/tool-categories").then(setCategories).catch(() => {});
+    api.get<ToolCategory[]>("/agents/tool-categories").then((cats) => {
+      setCategories(cats);
+      // Seçili tool'u olan kategorileri varsayılan olarak açık getir
+      const sel = new Set(initial?.tool_names ?? []);
+      setOpenCats(new Set(cats.filter((c) => c.tools.some((t) => sel.has(t.name))).map((c) => c.key)));
+    }).catch(() => {});
     api.get<McpServer[]>("/mcp-servers").then(setMcpServers).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function toggleCat(key: string) {
+    setOpenCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function toggleMcpTool(serverId: string, tool: McpToolInfo) {
     const key = `${serverId}:${tool.name}`;
@@ -340,65 +357,90 @@ export function AgentForm({
               );
             }
 
-            // Seçilebilir kategori (web / self)
+            // Seçilebilir kategori (web / self) — akordiyon + grid
             const toolNames = cat.tools.map((t) => t.name);
             const allOn = toolNames.length > 0 && toolNames.every((n) => selected.has(n));
+            const selectedCount = toolNames.filter((n) => selected.has(n)).length;
+            const isOpen = openCats.has(cat.key);
             return (
-              <div key={cat.key} className="rounded-lg border border-zinc-800 px-3 py-2.5">
-                <div className="mb-1.5 flex items-center gap-2">
+              <div key={cat.key} className="overflow-hidden rounded-lg border border-zinc-800">
+                {/* Akordiyon başlığı */}
+                <button
+                  type="button"
+                  onClick={() => toggleCat(cat.key)}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-zinc-900/50"
+                >
+                  <ChevronDown
+                    size={14}
+                    className={cn("shrink-0 text-zinc-500 transition-transform", isOpen && "rotate-180")}
+                  />
                   <Icon size={14} className="text-indigo-400" />
                   <span className="text-sm font-medium text-zinc-200">{cat.label}</span>
-                  <span className="text-[11px] text-zinc-600">{cat.note}</span>
-                  <button
-                    type="button"
-                    onClick={() => setCategoryTools(toolNames, !allOn)}
-                    className="ml-auto text-[11px] text-indigo-400 transition-colors hover:text-indigo-300"
-                  >
-                    {allOn ? "Tümünü kaldır" : "Tümünü seç"}
-                  </button>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  {cat.tools.map((tool) => {
-                    const isSelected = selected.has(tool.name);
-                    const isHitl = hitl.has(tool.name);
-                    return (
-                      <div
-                        key={tool.name}
-                        className={cn(
-                          "rounded-md border px-3 py-2 transition-colors",
-                          isSelected
-                            ? "border-indigo-500/30 bg-indigo-500/5"
-                            : "border-zinc-800/70 hover:border-zinc-700",
-                        )}
+                  {selectedCount > 0 && (
+                    <span className="rounded-full bg-indigo-500/15 px-1.5 py-0.5 text-[10px] text-indigo-300">
+                      {selectedCount} seçili
+                    </span>
+                  )}
+                  <span className="ml-auto text-[11px] text-zinc-600">{cat.tools.length} araç</span>
+                </button>
+
+                {isOpen && (
+                  <div className="border-t border-zinc-800/60 px-3 py-2.5">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-600">{cat.note}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCategoryTools(toolNames, !allOn)}
+                        className="ml-auto text-[11px] text-indigo-400 transition-colors hover:text-indigo-300"
                       >
-                        <label className="flex cursor-pointer items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleTool(tool.name)}
-                            className="mt-0.5 accent-indigo-500"
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm text-zinc-200">{tool.name}</p>
-                            <p className="text-xs text-zinc-600">{tool.description}</p>
+                        {allOn ? "Tümünü kaldır" : "Tümünü seç"}
+                      </button>
+                    </div>
+                    {/* Yan yana grid */}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {cat.tools.map((tool) => {
+                        const isSelected = selected.has(tool.name);
+                        const isHitl = hitl.has(tool.name);
+                        return (
+                          <div
+                            key={tool.name}
+                            className={cn(
+                              "rounded-md border px-2.5 py-2 transition-colors",
+                              isSelected
+                                ? "border-indigo-500/30 bg-indigo-500/5"
+                                : "border-zinc-800/70 hover:border-zinc-700",
+                            )}
+                          >
+                            <label className="flex cursor-pointer items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleTool(tool.name)}
+                                className="mt-0.5 accent-indigo-500"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm text-zinc-200">{tool.name}</p>
+                                <p className="line-clamp-2 text-[11px] text-zinc-600">{tool.description}</p>
+                              </div>
+                            </label>
+                            {isSelected && tool.name !== "ask_user" && (
+                              <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 pl-6 text-[11px] text-amber-300/80">
+                                <input
+                                  type="checkbox"
+                                  checked={isHitl}
+                                  onChange={() => toggleHitl(tool.name)}
+                                  className="accent-amber-500"
+                                />
+                                <ShieldCheck size={11} />
+                                HITL onayı
+                              </label>
+                            )}
                           </div>
-                        </label>
-                        {isSelected && tool.name !== "ask_user" && (
-                          <label className="mt-2 flex cursor-pointer items-center gap-2 pl-7 text-xs text-amber-300/80">
-                            <input
-                              type="checkbox"
-                              checked={isHitl}
-                              onChange={() => toggleHitl(tool.name)}
-                              className="accent-amber-500"
-                            />
-                            <ShieldCheck size={12} />
-                            İnsan onayı gerektir (HITL)
-                          </label>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

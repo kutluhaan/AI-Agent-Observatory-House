@@ -170,6 +170,7 @@ async def _build_runner(
         db=db,
         redis=redis,
         agent_id=agent.id,
+        user_id=ctx.user_id,  # G1: Gmail gibi per-user tool'lar için
     )
 
     try:
