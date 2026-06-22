@@ -65,6 +65,9 @@ async def lifespan(app: FastAPI):
     # M9: Built-in tool'ları kaydet
     from app.services.agent.tools.builtin import register_builtin_tools
     register_builtin_tools()
+    # F8: ekip tool'ları (delegate / team_share / team_board)
+    from app.services.agent.tools.team import register_team_tools
+    register_team_tools()
     logger.info("Agent built-in tools registered")
 
     # Faz 3: Dosya sistemi tool'larını kaydet
