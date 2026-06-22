@@ -15,7 +15,7 @@ belgelenir.
 | F5 | Dashboard & rapor & bilgi-etkisi gözlemi | ✅ |
 | F6 | Senaryo tabanlı çalıştırma (çok-adımlı + kontrol noktaları) | ✅ |
 | F7 | MCP server + custom agent HTTP invoke | ✅ |
-| F8 | Agent ekipleri (çok-agent işbirliği) | ⏳ |
+| F8 | Agent ekipleri (çok-agent işbirliği) | ✅ |
 
 ## İçindekiler
 
@@ -32,6 +32,7 @@ belgelenir.
 - [Custom model (OpenAI-uyumlu)](features/custom-model-provider.md) — self-hosted endpoint + Providers ayar sayfası
 - [External agent (HTTP invoke)](features/http-agent.md) — dış agent'ı OpenAI-uyumlu HTTP ile çağır (F7.1)
 - [MCP server entegrasyonu](features/mcp-integration.md) — dış MCP tool'larını agent'a bağla (F7.2)
+- [Agent ekipleri](features/agent-teams.md) — rollü çok-agent işbirliği (delegasyon + paylaşılan pano) (F8)
 - [Agent performans paneli](features/agent-performance-panel.md) — agent başına birleşik test performansı (F5.1)
 - [Org dashboard & bilgi-etkisi](features/org-dashboard.md) — org özeti + agent sıralaması + RAG trendi (F5.2/F5.3)
 
