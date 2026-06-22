@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, ChevronRight } from "lucide-react";
+import { ArrowLeft, Play, ChevronRight, SlidersHorizontal } from "lucide-react";
 import {
   api,
   ApiError,
@@ -11,6 +11,8 @@ import {
   type TestRun,
   type SuiteStats,
   type SuiteTrendPoint,
+  type KpiCatalog,
+  type KpiCatalogItem,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -25,6 +27,7 @@ export default function TestSuiteDetailPage() {
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [stats, setStats] = useState<SuiteStats | null>(null);
+  const [kpiCatalog, setKpiCatalog] = useState<KpiCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [parallel, setParallel] = useState(false);
@@ -41,8 +44,19 @@ export default function TestSuiteDetailPage() {
       .then(setSuite)
       .catch(() => setError("Test suite not found."))
       .finally(() => setLoading(false));
+    api.get<KpiCatalog>(`/test-suites/kpi-catalog`).then(setKpiCatalog).catch(() => {});
     loadRuns();
   }, [id, loadRuns]);
+
+  // KPI seçimini kalıcı kaydet (suite'e PATCH) — boş → null (= varsayılan)
+  const saveKpis = useCallback(
+    async (keys: string[]) => {
+      const payload = keys.length ? keys : null;
+      const updated = await api.patch<TestSuite>(`/test-suites/${id}`, { kpis: payload });
+      setSuite(updated);
+    },
+    [id],
+  );
 
   async function handleRun() {
     setStarting(true);
@@ -116,13 +130,18 @@ export default function TestSuiteDetailPage() {
         {suite?.config_yaml}
       </pre>
 
-      {/* Performans (kalıcı: tamamlanmış run'lardan) */}
-      {stats && stats.completed_runs > 0 && (
+      {/* Performans (kalıcı: tamamlanmış run'lardan + suite'e kayıtlı KPI seçimi) */}
+      {stats && stats.completed_runs > 0 && kpiCatalog && (
         <>
           <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
             Performans · {stats.completed_runs} tamamlanan run
           </h2>
-          <PerformancePanel stats={stats} />
+          <PerformancePanel
+            stats={stats}
+            catalog={kpiCatalog}
+            selected={suite?.kpis ?? kpiCatalog.defaults}
+            onSave={saveKpis}
+          />
         </>
       )}
 
@@ -176,19 +195,124 @@ function fmtUsd(v: number | null): string {
   return `$${v < 0.01 ? v.toFixed(5) : v.toFixed(4)}`;
 }
 
-function PerformancePanel({ stats }: { stats: SuiteStats }) {
+function kpiValue(stats: SuiteStats, item: KpiCatalogItem): string {
+  const raw = (stats as unknown as Record<string, number | null>)[item.key];
+  if (raw == null) return "—";
+  switch (item.unit) {
+    case "percent":
+      return fmtPct(raw);
+    case "ms":
+      return `${(raw / 1000).toFixed(2)}s`;
+    case "usd":
+      return fmtUsd(raw);
+    case "score":
+      return raw.toFixed(2);
+    case "count":
+      return String(raw);
+    default:
+      return String(raw);
+  }
+}
+
+function PerformancePanel({
+  stats,
+  catalog,
+  selected,
+  onSave,
+}: {
+  stats: SuiteStats;
+  catalog: KpiCatalog;
+  selected: string[];
+  onSave: (keys: string[]) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string[]>(selected);
+  const [saving, setSaving] = useState(false);
+
+  // Katalog sırasını koruyarak seçili KPI'ları çöz (bilinmeyen anahtarları at)
+  const shown = catalog.catalog.filter((c) => selected.includes(c.key));
+
+  function toggle(key: string) {
+    setDraft((d) => (d.includes(key) ? d.filter((k) => k !== key) : [...d, key]));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      // Katalog sırasına göre normalize et
+      const ordered = catalog.catalog.filter((c) => draft.includes(c.key)).map((c) => c.key);
+      await onSave(ordered);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="mb-8 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi label="Başarılı run" value={fmtPct(stats.success_run_rate)} hint="tüm case'leri geçen" accent />
-        <Kpi label="Ort. geçme oranı" value={fmtPct(stats.avg_pass_rate)} hint="case düzeyi" />
-        <Kpi
-          label="Ort. cevap süresi"
-          value={stats.avg_latency_ms != null ? `${(stats.avg_latency_ms / 1000).toFixed(2)}s` : "—"}
-          hint="run ortalaması"
-        />
-        <Kpi label="Ort. maliyet" value={fmtUsd(stats.avg_cost_usd)} hint="run başına" />
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[11px] text-zinc-600">İzlenen KPI&apos;lar</span>
+        <button
+          onClick={() => {
+            setDraft(selected);
+            setEditing((e) => !e);
+          }}
+          className="flex items-center gap-1 text-[11px] text-zinc-500 transition-colors hover:text-zinc-300"
+        >
+          <SlidersHorizontal size={12} />
+          {editing ? "Kapat" : "KPI düzenle"}
+        </button>
       </div>
+
+      {editing ? (
+        <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {catalog.catalog.map((c) => (
+              <label
+                key={c.key}
+                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-zinc-900"
+                title={c.description}
+              >
+                <input
+                  type="checkbox"
+                  checked={draft.includes(c.key)}
+                  onChange={() => toggle(c.key)}
+                  className="mt-0.5 accent-indigo-500"
+                />
+                <span>
+                  <span className="text-zinc-200">{c.label}</span>
+                  <span className="block text-[10px] text-zinc-600">{c.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Button size="sm" onClick={save} loading={saving}>
+              Kaydet
+            </Button>
+            <span className="text-[10px] text-zinc-600">
+              Seçim suite&apos;e kaydedilir; çıkış yapsan da kalır. Boş bırakırsan varsayılana döner.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {shown.length === 0 ? (
+            <p className="col-span-full text-xs text-zinc-600">Hiç KPI seçili değil.</p>
+          ) : (
+            shown.map((c) => (
+              <Kpi
+                key={c.key}
+                label={c.label}
+                value={kpiValue(stats, c)}
+                hint={c.description}
+                accent={c.key === "success_run_rate"}
+              />
+            ))
+          )}
+        </div>
+      )}
+
       {stats.trend.length > 1 && (
         <div className="mt-4">
           <p className="mb-1.5 text-[11px] text-zinc-600">Geçme oranı trendi (eski → yeni)</p>

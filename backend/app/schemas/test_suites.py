@@ -6,7 +6,18 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.services.test_suite.kpi_catalog import VALID_KPI_KEYS
+
+
+def _validate_kpis(v: list[str] | None) -> list[str] | None:
+    if v is None:
+        return v
+    invalid = [k for k in v if k not in VALID_KPI_KEYS]
+    if invalid:
+        raise ValueError(f"Unknown KPI key(s): {', '.join(invalid)}")
+    return v
 
 
 # ─── TestSuite ────────────────────────────────────────────
@@ -15,12 +26,18 @@ class CreateTestSuiteRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=200)]
     description: str | None = None
     config_yaml: Annotated[str, Field(min_length=1)]
+    kpis: list[str] | None = None
+
+    _check_kpis = field_validator("kpis")(_validate_kpis)
 
 
 class UpdateTestSuiteRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=200)] | None = None
     description: str | None = None
     config_yaml: Annotated[str, Field(min_length=1)] | None = None
+    kpis: list[str] | None = None
+
+    _check_kpis = field_validator("kpis")(_validate_kpis)
 
 
 class TestSuiteResponse(BaseModel):
@@ -28,6 +45,7 @@ class TestSuiteResponse(BaseModel):
     name: str
     description: str | None
     config_yaml: str
+    kpis: list[str] | None
     created_by: uuid.UUID | None
     created_at: str
     updated_at: str
@@ -39,6 +57,7 @@ class TestSuiteResponse(BaseModel):
             name=obj.name,
             description=obj.description,
             config_yaml=obj.config_yaml,
+            kpis=obj.kpis,
             created_by=obj.created_by,
             created_at=obj.created_at.isoformat(),
             updated_at=obj.updated_at.isoformat(),

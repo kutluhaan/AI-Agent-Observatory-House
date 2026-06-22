@@ -118,6 +118,59 @@ async def test_create_suite_name_conflict_returns_409(owner_client):
     assert_error(resp.json(), "SUITE_NAME_CONFLICT")
 
 
+# ─── F4.2: Suite KPI seçimi ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_kpi_catalog_endpoint(owner_client):
+    client, _, _ = owner_client
+    resp = await client.get("/test-suites/kpi-catalog")
+    assert resp.status_code == 200
+    data = assert_success(resp.json())
+    keys = {c["key"] for c in data["catalog"]}
+    assert "success_run_rate" in keys
+    assert "avg_judge_score" in keys
+    assert set(data["defaults"]).issubset(keys)
+
+
+@pytest.mark.asyncio
+async def test_create_suite_defaults_kpis_null(owner_client):
+    client, _, _ = owner_client
+    data = assert_success((await _create_suite(client)).json())
+    assert data["kpis"] is None  # NULL → frontend varsayılanı kullanır
+
+
+@pytest.mark.asyncio
+async def test_update_suite_kpis_persists(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+
+    chosen = ["success_run_rate", "avg_judge_score"]
+    resp = await client.patch(f"/test-suites/{suite_id}", json={"kpis": chosen})
+    assert resp.status_code == 200
+    assert assert_success(resp.json())["kpis"] == chosen
+
+    # Kalıcı: tekrar GET'te aynen gelmeli
+    again = assert_success((await client.get(f"/test-suites/{suite_id}")).json())
+    assert again["kpis"] == chosen
+
+
+@pytest.mark.asyncio
+async def test_update_suite_kpis_null_resets(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    await client.patch(f"/test-suites/{suite_id}", json={"kpis": ["avg_cost_usd"]})
+    resp = await client.patch(f"/test-suites/{suite_id}", json={"kpis": None})
+    assert assert_success(resp.json())["kpis"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_suite_invalid_kpi_returns_422(owner_client):
+    client, _, _ = owner_client
+    suite_id = assert_success((await _create_suite(client)).json())["id"]
+    resp = await client.patch(f"/test-suites/{suite_id}", json={"kpis": ["made_up_kpi"]})
+    assert resp.status_code == 422
+
+
 @pytest.mark.asyncio
 async def test_list_suites(owner_client):
     client, _, _ = owner_client

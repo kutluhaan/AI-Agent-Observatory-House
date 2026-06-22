@@ -51,20 +51,36 @@ toplu KPI'lar + zaman serisi (trend) döner.
 ## UI
 
 Suite detay sayfasında (`/test-suites/{id}`) Runs listesinin üstünde **Performans
-paneli**: 4 KPI kartı (başarılı run, ort. geçme oranı, ort. cevap süresi, ort.
-maliyet) + **geçme oranı trendi** (run başına renkli çubuk: yeşil ≥99%, amber
-≥60%, kırmızı <60%; hover'da tarih + oran + gecikme). Yalnızca en az 1 tamamlanmış
-run varsa görünür.
+paneli**: seçili KPI kartları + **geçme oranı trendi** (run başına renkli çubuk:
+yeşil ≥99%, amber ≥60%, kırmızı <60%; hover'da tarih + oran + gecikme). Yalnızca
+en az 1 tamamlanmış run varsa görünür.
+
+## Seçilebilir KPI'lar (F4.2)
+
+Hangi KPI'ların gösterileceği **suite başına** seçilir ve **kalıcıdır**
+(`test_suites.kpis` JSONB kolonu — migration `0015`). Çıkış/giriş yapsan da seçim
+kalır. `NULL` → varsayılan set gösterilir.
+
+- **Katalog:** `GET /test-suites/kpi-catalog` → `{catalog:[{key,label,unit,description}], defaults:[…]}`.
+  Her `key`, yukarıdaki `stats` çıktısındaki bir alana birebir karşılık gelir;
+  `unit` (percent/ms/usd/score/count) frontend'in biçimlendirmesini belirler.
+- **Seçimi kaydet:** `PATCH /test-suites/{id}` gövdesinde `{"kpis": ["success_run_rate", …]}`
+  (geçersiz anahtar → `422`). `{"kpis": null}` → varsayılana döner.
+- **UI:** panelde **"KPI düzenle"** → katalogdan checkbox seçimi → **Kaydet**.
+- **Varsayılan set:** `success_run_rate`, `avg_pass_rate`, `avg_latency_ms`, `avg_cost_usd`.
+- F5 org-geneli dashboard bu seçimi temel alacaktır.
 
 ## Entegrasyon noktaları
 
 | Katman | Dosya |
 |---|---|
 | KPI hesaplama (saf) | `backend/app/services/test_suite/suite_stats.py` → `compute_suite_stats` |
-| Endpoint | `backend/app/api/v1/test_suites.py` → `get_suite_stats` |
-| UI panel | `frontend/src/app/(app)/test-suites/[id]/page.tsx` → `PerformancePanel` |
-| Tip | `frontend/src/lib/api.ts` → `SuiteStats`, `SuiteTrendPoint` |
-| Test | `backend/tests/unit/test_suite_stats.py` |
+| KPI kataloğu (F4.2) | `backend/app/services/test_suite/kpi_catalog.py` → `KPI_CATALOG`, `DEFAULT_KPIS`, `normalize_kpis` |
+| Endpoint | `backend/app/api/v1/test_suites.py` → `get_suite_stats`, `get_kpi_catalog` |
+| Kalıcılık | `test_suites.kpis` (migration `0015`) + `UpdateTestSuiteRequest.kpis` validator |
+| UI panel | `frontend/src/app/(app)/test-suites/[id]/page.tsx` → `PerformancePanel` (KPI düzenle) |
+| Tip | `frontend/src/lib/api.ts` → `SuiteStats`, `KpiCatalog`, `KpiCatalogItem` |
+| Test | `backend/tests/unit/test_suite_stats.py`, `test_kpi_catalog.py`, `tests/integration/test_test_runner.py` |
 
 `compute_suite_stats` saf bir fonksiyondur; F5'teki org-geneli dashboard'da da
 tekrar kullanılacaktır.

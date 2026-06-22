@@ -52,6 +52,8 @@ class TestSuite(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     config_yaml: Mapped[str] = mapped_column(Text, nullable=False)
+    # F4.2: bu suite için izlenen KPI anahtarları; NULL → kpi_catalog.DEFAULT_KPIS
+    kpis: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

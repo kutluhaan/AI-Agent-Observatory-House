@@ -36,6 +36,7 @@ from app.schemas.test_suites import (
     UpdateTestSuiteRequest,
 )
 from app.services.test_suite.experiment_runner import ExperimentRunner
+from app.services.test_suite.kpi_catalog import DEFAULT_KPIS, KPI_CATALOG
 from app.services.test_suite.parser import ParseError, parse_yaml
 from app.ws.traces import manager as ws_manager
 
@@ -115,6 +116,7 @@ async def create_test_suite(
         name=body.name,
         description=body.description,
         config_yaml=body.config_yaml,
+        kpis=body.kpis,
     )
     db.add(suite)
     await db.flush()
@@ -153,6 +155,18 @@ async def list_test_suites(
     )
     suites = result.scalars().all()
     return success([TestSuiteResponse.from_orm(s).model_dump() for s in suites])
+
+
+@router.get("/kpi-catalog")
+async def get_kpi_catalog(
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """F4.2: Suite başına seçilebilir KPI kataloğu + varsayılan set.
+
+    NOT: `/{suite_id}` UUID route'undan ÖNCE tanımlı olmalı, yoksa "kpi-catalog"
+    UUID olarak parse edilmeye çalışılır.
+    """
+    return success({"catalog": KPI_CATALOG, "defaults": DEFAULT_KPIS})
 
 
 @router.get("/{suite_id}")
