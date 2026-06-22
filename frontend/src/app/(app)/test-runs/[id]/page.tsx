@@ -11,6 +11,7 @@ import {
   type TrajectoryStep,
   type JudgeResult,
   type ConsistencyInfo,
+  type StepResult,
 } from "@/lib/api";
 import { subscribeTestRuns } from "@/lib/ws";
 import { Alert } from "@/components/ui/alert";
@@ -229,6 +230,8 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
   const [open, setOpen] = useState(false);
   const passedCount = cr.assertions_results.filter((a) => a.passed).length;
   const totalCount = cr.assertions_results.length;
+  const isScenario = !!cr.steps_results && cr.steps_results.length > 0;
+  const stepsPassed = isScenario ? cr.steps_results!.filter((s) => s.passed).length : 0;
 
   return (
     <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40">
@@ -238,7 +241,11 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
       >
         <Badge variant={statusVariant(cr.status)}>{cr.status}</Badge>
         <span className="flex-1 truncate text-sm text-zinc-200">
-          {totalCount > 0 ? `${passedCount}/${totalCount} assertions` : cr.status}
+          {isScenario
+            ? `Senaryo · ${stepsPassed}/${cr.steps_results!.length} adım`
+            : totalCount > 0
+              ? `${passedCount}/${totalCount} assertions`
+              : cr.status}
         </span>
         <span className="flex shrink-0 items-center gap-2.5 text-[11px] text-zinc-600">
           {cr.consistency && (
@@ -267,20 +274,29 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
             <Alert variant="error" className="mb-3">{cr.error_message}</Alert>
           )}
 
-          {cr.assertions_results.length > 0 && (
-            <div className="mb-3 flex flex-col gap-1">
-              {cr.assertions_results.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 text-zinc-400">
-                  {a.passed ? (
-                    <CheckCircle2 size={13} className="shrink-0 text-green-400" />
-                  ) : (
-                    <XCircle size={13} className="shrink-0 text-red-400" />
-                  )}
-                  <span className="font-mono">{a.type ?? "assertion"}</span>
-                  {a.detail && <span className="text-zinc-600">— {a.detail}</span>}
-                </div>
+          {/* F6: senaryo adımları (varsa flat assertion listesi yerine adım-adım) */}
+          {isScenario ? (
+            <div className="mb-3 flex flex-col gap-2">
+              {cr.steps_results!.map((s) => (
+                <StepView key={s.step} step={s} />
               ))}
             </div>
+          ) : (
+            cr.assertions_results.length > 0 && (
+              <div className="mb-3 flex flex-col gap-1">
+                {cr.assertions_results.map((a, i) => (
+                  <div key={i} className="flex items-center gap-2 text-zinc-400">
+                    {a.passed ? (
+                      <CheckCircle2 size={13} className="shrink-0 text-green-400" />
+                    ) : (
+                      <XCircle size={13} className="shrink-0 text-red-400" />
+                    )}
+                    <span className="font-mono">{a.type ?? "assertion"}</span>
+                    {a.detail && <span className="text-zinc-600">— {a.detail}</span>}
+                  </div>
+                ))}
+              </div>
+            )
           )}
 
           {cr.consistency && (
@@ -350,6 +366,51 @@ function CaseRow({ cr }: { cr: TestCaseResult }) {
 }
 
 // ── Trajectory: agent'ın test sırasında attığı adımlar ──────
+
+function StepView({ step }: { step: StepResult }) {
+  const aPassed = step.assertions_results.filter((a) => a.passed).length;
+  return (
+    <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+      <div className="mb-1.5 flex items-center gap-2">
+        {step.passed ? (
+          <CheckCircle2 size={13} className="shrink-0 text-green-400" />
+        ) : (
+          <XCircle size={13} className="shrink-0 text-red-400" />
+        )}
+        <span className="text-[11px] font-medium text-zinc-300">Adım {step.step + 1}</span>
+        {step.assertions_results.length > 0 && (
+          <span className="text-[10px] text-zinc-600">
+            {aPassed}/{step.assertions_results.length} checkpoint
+          </span>
+        )}
+        {step.latency_ms != null && (
+          <span className="ml-auto text-[10px] text-zinc-600">{(step.latency_ms / 1000).toFixed(2)}s</span>
+        )}
+      </div>
+      <p className="mb-1 text-[11px] text-indigo-300">▸ {step.input}</p>
+      {step.error ? (
+        <p className="text-[11px] text-red-400">hata: {step.error}</p>
+      ) : (
+        <p className="line-clamp-3 whitespace-pre-wrap text-[11px] text-zinc-500">{step.output}</p>
+      )}
+      {step.assertions_results.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-0.5">
+          {step.assertions_results.map((a, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+              {a.passed ? (
+                <CheckCircle2 size={11} className="shrink-0 text-green-400/70" />
+              ) : (
+                <XCircle size={11} className="shrink-0 text-red-400/70" />
+              )}
+              <span className="font-mono">{a.type ?? "assertion"}</span>
+              {a.detail && <span className="text-zinc-600">— {a.detail}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TrajectoryView({ steps }: { steps: TrajectoryStep[] }) {
   return (

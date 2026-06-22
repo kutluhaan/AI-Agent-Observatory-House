@@ -108,6 +108,8 @@ class TestCase(Base):
     min_pass_rate: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
     expected_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     rag_context: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # F6: senaryo adımları [{input, assertions:[{type,value}]}]; NULL → tekil case
+    steps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -208,6 +210,8 @@ class TestCaseResult(Base):
     judge_results: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # Tutarlılık (Faz C): {runs, passed_runs, pass_rate, min_pass_rate, runs_detail}
     consistency: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # F6: senaryo adım sonuçları [{step, input, output, passed, latency_ms, assertions_results}]
+    steps_results: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # Token kullanımından yaklaşık USD maliyet
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

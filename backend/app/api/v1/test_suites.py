@@ -138,6 +138,7 @@ async def create_test_suite(
             min_pass_rate=pc.min_pass_rate,
             expected_output=pc.expected_output,
             rag_context=pc.rag_context,
+            steps=[s.to_dict() for s in pc.steps] if pc.steps else None,
         )
         db.add(tc)
 
@@ -233,6 +234,7 @@ async def update_test_suite(
                 min_pass_rate=pc.min_pass_rate,
                 expected_output=pc.expected_output,
                 rag_context=pc.rag_context,
+                steps=[s.to_dict() for s in pc.steps] if pc.steps else None,
             ))
 
     suite.updated_at = datetime.now(UTC)

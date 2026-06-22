@@ -12,7 +12,7 @@ belgelenir.
 | F2 | Tool kategorileri (file/web/finance/operation/self) | ✅ |
 | F3 | Self-hosted / OpenAI-uyumlu custom model | ✅ |
 | F4 | Test derinliği (prompt override + A/B, çıktı kalitesi, KPI tablosu) | ✅ |
-| F5 | Dashboard & rapor & bilgi-etkisi gözlemi | ⏳ |
+| F5 | Dashboard & rapor & bilgi-etkisi gözlemi | ✅ |
 | F6 | Senaryo tabanlı çalıştırma (çok-adımlı + kontrol noktaları) | ⏳ |
 | F7 | MCP server + custom agent HTTP invoke | ⏳ |
 | F8 | Agent ekipleri (çok-agent işbirliği) | ⏳ |
@@ -29,6 +29,8 @@ belgelenir.
 ### Ajan & Araçlar
 - [Tool kategorileri](features/tool-categories.md) — file/web/finance/operation/self; kategori bazlı seçim
 - [Custom model (OpenAI-uyumlu)](features/custom-model-provider.md) — self-hosted endpoint + Providers ayar sayfası
+- [Agent performans paneli](features/agent-performance-panel.md) — agent başına birleşik test performansı (F5.1)
+- [Org dashboard & bilgi-etkisi](features/org-dashboard.md) — org özeti + agent sıralaması + RAG trendi (F5.2/F5.3)
 
 > Önceki fazların (A/B/C: trajectory, deterministik assertion'lar, maliyet,
 > LLM-as-judge, tutarlılık, güvenlik) referansı için kodu inceleyin:

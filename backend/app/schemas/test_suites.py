@@ -149,6 +149,7 @@ class TestCaseResultResponse(BaseModel):
     trajectory: list[dict[str, Any]] | None
     judge_results: list[dict[str, Any]] | None
     consistency: dict[str, Any] | None
+    steps_results: list[dict[str, Any]] | None
     cost_usd: float | None
     error_message: str | None
     created_at: str
@@ -169,6 +170,7 @@ class TestCaseResultResponse(BaseModel):
             trajectory=obj.trajectory,
             judge_results=obj.judge_results,
             consistency=obj.consistency,
+            steps_results=getattr(obj, "steps_results", None),
             cost_usd=obj.cost_usd,
             error_message=obj.error_message,
             created_at=obj.created_at.isoformat(),

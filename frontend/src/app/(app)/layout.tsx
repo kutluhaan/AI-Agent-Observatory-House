@@ -3,13 +3,14 @@
 import type { ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth";
 import { cn } from "@/lib/utils";
 
 const NAV = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Agents", href: "/agents", icon: Zap },
   { label: "Traces", href: "/traces", icon: Activity },
   { label: "Test Suites", href: "/test-suites", icon: TestTube2 },

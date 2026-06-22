@@ -104,6 +104,10 @@ async def run_case(
 
     sandbox = AgentSandbox(config=config, provider=provider, redis=redis, db=db)
 
+    # F6: senaryo modu — case'in steps'i varsa çok-turlu çalıştır (checkpoint'ler)
+    if getattr(case, "steps", None):
+        return await _run_scenario(db, run, case, sandbox)
+
     # Faz C: tutarlılık — case'i repeat kez çalıştır
     repeat = max(1, int(getattr(case, "repeat", 1) or 1))
     min_pass_rate = float(getattr(case, "min_pass_rate", 1.0) or 1.0)
@@ -177,6 +181,79 @@ async def run_case(
         judge_results=rep.judge_results,
         cost_usd=cost_usd,
         consistency=consistency,
+    )
+
+
+async def _run_scenario(db, run, case, sandbox) -> TestCaseResult:
+    """F6: Çok-turlu senaryo. Her adım biriken konuşma geçmişiyle çalışır; o adımın
+    checkpoint'leri (assertions) değerlendirilir. Davranış: 'devam et, hepsini raporla'
+    — bir adım kalsa da sonraki adımlar çalışır. Case status: TÜM adımlar geçerse passed."""
+    history: list[dict[str, str]] = []
+    steps_results: list[dict] = []
+    all_passed = True
+    total_latency = 0
+    total_tokens = 0
+    total_cost = 0.0
+    rep_trace: str | None = None
+    last_trajectory = None
+
+    for idx, step in enumerate(case.steps or []):
+        s_input = step.get("input", "")
+        s_assertions = step.get("assertions", []) or []
+        try:
+            sandbox_result: SandboxResult = await sandbox.run(s_input, history=history)
+        except Exception as exc:
+            logger.error("test_case_runner.scenario_step_error", step=idx, error=str(exc))
+            all_passed = False
+            steps_results.append({
+                "step": idx, "input": s_input, "output": None, "passed": False,
+                "error": str(exc), "assertions_results": [],
+            })
+            history.append({"role": "user", "content": s_input})
+            history.append({"role": "assistant", "content": ""})
+            continue
+
+        ar = sandbox_result.agent_result
+        a_results = evaluate_all(
+            [{"type": a["type"], "value": a["value"]} for a in s_assertions],
+            sandbox_result,
+        )
+        step_passed = all(r.passed for r in a_results)
+        all_passed = all_passed and step_passed
+
+        total_latency += sandbox_result.latency_ms
+        if ar.total_usage:
+            total_tokens += sum(ar.total_usage.values())
+        if sandbox_result.cost_usd:
+            total_cost += sandbox_result.cost_usd
+        rep_trace = rep_trace or ar.trace_id
+        last_trajectory = sandbox_result.trajectory
+
+        steps_results.append({
+            "step": idx,
+            "input": s_input,
+            "output": ar.content,
+            "passed": step_passed,
+            "latency_ms": sandbox_result.latency_ms,
+            "assertions_results": [r.to_dict() for r in a_results],
+        })
+        history.append({"role": "user", "content": s_input})
+        history.append({"role": "assistant", "content": ar.content})
+
+    rep_output = steps_results[-1]["output"] if steps_results else None
+    flat_assertions = [a for s in steps_results for a in s.get("assertions_results", [])]
+
+    return await _save_result(
+        db, run.id, case.id,
+        status="passed" if all_passed else "failed",
+        output=rep_output,
+        trace_id=rep_trace,
+        latency_ms=round(total_latency) if total_latency else None,
+        total_tokens=total_tokens or None,
+        assertions_results=flat_assertions,
+        trajectory=last_trajectory,
+        steps_results=steps_results,
+        cost_usd=round(total_cost, 6) if total_cost else None,
     )
 
 
@@ -261,6 +338,7 @@ async def _save_result(
     trajectory: list | None = None,
     judge_results: list | None = None,
     consistency: dict | None = None,
+    steps_results: list | None = None,
     cost_usd: float | None = None,
     error_message: str | None = None,
 ) -> TestCaseResult:
@@ -279,6 +357,7 @@ async def _save_result(
         trajectory=trajectory,
         judge_results=judge_results,
         consistency=consistency,
+        steps_results=steps_results,
         cost_usd=cost_usd,
         error_message=error_message,
         created_at=datetime.now(UTC),

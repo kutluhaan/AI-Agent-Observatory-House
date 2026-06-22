@@ -312,6 +312,33 @@ async def get_agent(
     return success(AgentResponse.from_orm(agent).model_dump())
 
 
+@router.get("/{agent_id}/stats")
+async def get_agent_stats(
+    agent_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("member")),
+):
+    """F5.1: Agent'ın tüm test run'larındaki case sonuçlarından toplu performans.
+
+    Canlı hesaplanır (TestCaseResult → TestCase.agent_id eşleşmesi). Kalıcı veriden;
+    çıkış/giriş yapsan da agent paneli orada olur.
+    """
+    from app.models.test_suite import TestCase, TestCaseResult, TestRun
+    from app.services.test_suite.agent_stats import compute_agent_stats
+
+    await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
+    rows = (await db.execute(
+        select(TestCaseResult)
+        .join(TestCase, TestCaseResult.case_id == TestCase.id)
+        .join(TestRun, TestCaseResult.run_id == TestRun.id)
+        .where(
+            TestCase.agent_id == agent_id,
+            TestRun.organization_id == ctx.org_id,
+        )
+    )).scalars().all()
+    return success(compute_agent_stats(list(rows)))
+
+
 # ─── Dosya gezgini (salt-okunur, Faz 3) ──────────────────
 
 @router.get("/{agent_id}/files")

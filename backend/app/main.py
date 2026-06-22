@@ -177,6 +177,9 @@ app.include_router(test_suites_router, prefix="/test-suites", tags=["test-suites
 app.include_router(test_runs_router, prefix="/test-runs", tags=["test-runs"])
 app.include_router(test_runs_ws_router, prefix="/ws", tags=["ws"])
 
+from app.api.v1.dashboard import router as dashboard_router
+app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])

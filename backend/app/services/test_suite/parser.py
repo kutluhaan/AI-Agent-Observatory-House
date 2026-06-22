@@ -105,6 +105,19 @@ class ParsedJudge:
 
 
 @dataclass
+class ParsedStep:
+    """F6: senaryo adımı — çok-turlu konuşmada bir tur + o turun checkpoint'leri."""
+    input: str
+    assertions: list[ParsedAssertion] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "input": self.input,
+            "assertions": [{"type": a.type, "value": a.value} for a in self.assertions],
+        }
+
+
+@dataclass
 class ParsedTestCase:
     name: str
     input: str
@@ -115,6 +128,7 @@ class ParsedTestCase:
     agent_id: uuid.UUID | None = None
     expected_output: str | None = None
     rag_context: list[str] | None = None
+    steps: list[ParsedStep] | None = None  # F6: senaryo (varsa input ilk adımdır)
 
 
 @dataclass
@@ -184,7 +198,13 @@ def _parse_case(
 ) -> ParsedTestCase:
     ctx = f"cases[{index}]"
     name = _require_str(raw, "name", ctx)
-    input_text = _require_str(raw, "input", ctx)
+
+    # F6: senaryo modu — 'steps' varsa çok-turlu, üst 'input' opsiyonel (temsilci = ilk adım)
+    steps = _parse_steps(raw.get("steps"), ctx)
+    if steps is not None:
+        input_text = steps[0].input
+    else:
+        input_text = _require_str(raw, "input", ctx)
 
     agent_id = _parse_agent_id(raw.get("agent_id"), context=f"{ctx}.agent_id")
     if agent_id is None:
@@ -199,29 +219,11 @@ def _parse_case(
         if not isinstance(rag_context, list) or not all(isinstance(c, str) for c in rag_context):
             raise ParseError(f"{ctx}.rag_context: string listesi olmalı.")
 
-    raw_assertions = raw.get("assertions", [])
-    if not isinstance(raw_assertions, list):
-        raise ParseError(f"{ctx}.assertions: liste olmalı.")
-
     assertions: list[ParsedAssertion] = []
-
     # expected_output shorthand → response_contains
     if expected_output:
         assertions.append(ParsedAssertion(type="response_contains", value=expected_output))
-
-    for j, raw_a in enumerate(raw_assertions):
-        actx = f"{ctx}.assertions[{j}]"
-        if not isinstance(raw_a, dict):
-            raise ParseError(f"{actx}: dict olmalı.")
-        a_type = _require_str(raw_a, "type", actx)
-        if a_type not in SUPPORTED_ASSERTION_TYPES:
-            raise ParseError(
-                f"{actx}.type '{a_type}' desteklenmiyor. "
-                f"Geçerli tipler: {sorted(SUPPORTED_ASSERTION_TYPES)}"
-            )
-        if "value" not in raw_a:
-            raise ParseError(f"{actx}: 'value' zorunlu.")
-        assertions.append(ParsedAssertion(type=a_type, value=raw_a["value"]))
+    assertions.extend(_parse_assertion_list(raw.get("assertions", []), ctx))
 
     # Judges: suite-level + case-level (birleştirilir)
     case_judges = _parse_judges(raw.get("judges"), ctx, expected_output)
@@ -241,7 +243,46 @@ def _parse_case(
         judges=judges,
         repeat=repeat,
         min_pass_rate=min_pass_rate,
+        steps=steps,
     )
+
+
+def _parse_assertion_list(raw_assertions: object, ctx: str) -> list[ParsedAssertion]:
+    """Bir assertion listesini ParsedAssertion'lara çevirir (case veya step seviyesi)."""
+    if not isinstance(raw_assertions, list):
+        raise ParseError(f"{ctx}.assertions: liste olmalı.")
+    out: list[ParsedAssertion] = []
+    for j, raw_a in enumerate(raw_assertions):
+        actx = f"{ctx}.assertions[{j}]"
+        if not isinstance(raw_a, dict):
+            raise ParseError(f"{actx}: dict olmalı.")
+        a_type = _require_str(raw_a, "type", actx)
+        if a_type not in SUPPORTED_ASSERTION_TYPES:
+            raise ParseError(
+                f"{actx}.type '{a_type}' desteklenmiyor. "
+                f"Geçerli tipler: {sorted(SUPPORTED_ASSERTION_TYPES)}"
+            )
+        if "value" not in raw_a:
+            raise ParseError(f"{actx}: 'value' zorunlu.")
+        out.append(ParsedAssertion(type=a_type, value=raw_a["value"]))
+    return out
+
+
+def _parse_steps(raw: object, ctx: str) -> list[ParsedStep] | None:
+    """F6: senaryo adımlarını parse eder. None → senaryo değil (tekil case)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or len(raw) == 0:
+        raise ParseError(f"{ctx}.steps: en az bir adım içeren liste olmalı.")
+    steps: list[ParsedStep] = []
+    for k, raw_step in enumerate(raw):
+        sctx = f"{ctx}.steps[{k}]"
+        if not isinstance(raw_step, dict):
+            raise ParseError(f"{sctx}: dict olmalı.")
+        s_input = _require_str(raw_step, "input", sctx)
+        s_assertions = _parse_assertion_list(raw_step.get("assertions", []), sctx)
+        steps.append(ParsedStep(input=s_input, assertions=s_assertions))
+    return steps
 
 
 def _parse_repeat(raw: object, ctx: str, default: int) -> int:

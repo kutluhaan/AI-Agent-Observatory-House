@@ -397,6 +397,39 @@ async def test_get_experiment_not_found(owner_client):
     assert resp.status_code == 404
 
 
+# ─── F6: Senaryo (çok-adımlı) suite oluşturma ─────────────
+
+_SCENARIO_YAML = """
+name: scenario-suite
+cases:
+  - name: multi-turn
+    steps:
+      - input: "Paris uçuşu bul"
+        assertions:
+          - type: response_contains
+            value: "Paris"
+      - input: "En ucuzunu seç"
+        assertions:
+          - type: response_not_contains
+            value: "error"
+"""
+
+
+@pytest.mark.asyncio
+async def test_create_scenario_suite_succeeds(owner_client):
+    client, _, _ = owner_client
+    resp = await _create_suite(client, yaml=_SCENARIO_YAML)
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_create_scenario_invalid_step_returns_422(owner_client):
+    client, _, _ = owner_client
+    bad = "name: s\ncases:\n  - name: c\n    steps:\n      - assertions: []\n"  # input yok
+    resp = await _create_suite(client, yaml=bad)
+    assert resp.status_code == 422
+
+
 @pytest.mark.asyncio
 async def test_other_org_cannot_access_run(owner_client, other_client):
     owner, _, _ = owner_client
