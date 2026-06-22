@@ -32,21 +32,26 @@ def _header(headers: list[dict], name: str) -> str:
     return ""
 
 
+def _decode_body(body: dict) -> str:
+    d = (body or {}).get("data")
+    return base64.urlsafe_b64decode(d).decode("utf-8", "replace") if d else ""
+
+
+def _find_mime(payload: dict, target: str) -> str:
+    if payload.get("mimeType") == target and payload.get("body", {}).get("data"):
+        return _decode_body(payload["body"])
+    for part in payload.get("parts", []) or []:
+        r = _find_mime(part, target)
+        if r:
+            return r
+    return ""
+
+
 def _extract_text(payload: dict) -> str:
-    """Mesaj gövdesinden text/plain çıkarır (yoksa text/html düşer)."""
+    """Mesaj gövdesinden metin çıkarır: önce text/plain, sonra text/html, sonra kök gövde."""
     if not payload:
         return ""
-    mime = payload.get("mimeType", "")
-    body = payload.get("body", {})
-    if mime == "text/plain" and body.get("data"):
-        return base64.urlsafe_b64decode(body["data"]).decode("utf-8", "replace")
-    for part in payload.get("parts", []) or []:
-        txt = _extract_text(part)
-        if txt:
-            return txt
-    if body.get("data"):  # fallback (ör. text/html)
-        return base64.urlsafe_b64decode(body["data"]).decode("utf-8", "replace")
-    return ""
+    return _find_mime(payload, "text/plain") or _find_mime(payload, "text/html") or _decode_body(payload.get("body", {}))
 
 
 def register_gmail_tools() -> None:

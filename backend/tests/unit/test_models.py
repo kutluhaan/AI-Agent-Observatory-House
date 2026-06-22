@@ -95,6 +95,7 @@ def test_all_tables_registered():
         "team_members",
         "team_runs",
         "team_run_messages",
+        "service_connections",
     }
     registered = set(Base.metadata.tables.keys())
     assert expected_tables == registered, f"Eksik tablolar: {expected_tables - registered}"

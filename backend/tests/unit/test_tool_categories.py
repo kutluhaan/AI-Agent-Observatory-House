@@ -31,7 +31,7 @@ def test_category_of():
 def test_build_categories_order_and_labels():
     _setup()
     cats = build_categories()
-    assert [c["key"] for c in cats] == ["file", "web", "self", "finance", "operation"]
+    assert [c["key"] for c in cats] == ["file", "web", "self", "email", "finance", "operation"]
 
 
 def test_web_and_self_have_expected_tools():
