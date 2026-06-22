@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.providers.factory import SUPPORTED_PROVIDERS
 
@@ -28,6 +28,9 @@ class CreateAgentRequest(BaseModel):
     tool_names: list[str] = Field(default_factory=list, max_length=_TOOL_NAMES_MAX)
     hitl_tool_names: list[str] = Field(default_factory=list, max_length=_TOOL_NAMES_MAX)
     file_system_enabled: bool = False
+    # F7.1: provider='http' için per-agent OpenAI-uyumlu endpoint
+    endpoint_url: Annotated[str | None, Field(max_length=500)] = None
+    endpoint_api_key: str | None = None
 
     @field_validator("provider")
     @classmethod
@@ -35,6 +38,12 @@ class CreateAgentRequest(BaseModel):
         if v not in SUPPORTED_PROVIDERS:
             raise ValueError(f"Provider must be one of: {', '.join(sorted(SUPPORTED_PROVIDERS))}")
         return v
+
+    @model_validator(mode="after")
+    def _require_endpoint_for_http(self):
+        if self.provider == "http" and not (self.endpoint_url or "").strip():
+            raise ValueError("provider='http' requires endpoint_url (OpenAI-compatible base URL).")
+        return self
 
     @field_validator("tool_names")
     @classmethod
@@ -71,6 +80,8 @@ class UpdateAgentRequest(BaseModel):
     hitl_tool_names: list[str] | None = None
     file_system_enabled: bool | None = None
     is_active: bool | None = None
+    endpoint_url: Annotated[str | None, Field(max_length=500)] = None
+    endpoint_api_key: str | None = None
 
     @field_validator("provider")
     @classmethod
@@ -119,6 +130,8 @@ class AgentResponse(BaseModel):
     hitl_tool_names: list[str]
     file_system_enabled: bool
     is_active: bool
+    endpoint_url: str | None
+    has_endpoint_api_key: bool
     created_by: uuid.UUID | None
     created_at: str
     updated_at: str
@@ -140,6 +153,8 @@ class AgentResponse(BaseModel):
             hitl_tool_names=agent.hitl_tool_names or [],
             file_system_enabled=agent.file_system_enabled,
             is_active=agent.is_active,
+            endpoint_url=getattr(agent, "endpoint_url", None),
+            has_endpoint_api_key=bool(getattr(agent, "endpoint_api_key", None)),
             created_by=agent.created_by,
             created_at=agent.created_at.isoformat(),
             updated_at=agent.updated_at.isoformat(),

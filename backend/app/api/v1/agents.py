@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, require_role
 from app.core.database import get_db
+from app.core.encryption import encrypt_value
 from app.core.redis import get_redis
 from app.core.responses import AppError, NotFoundError, success
 from app.models.agent import Agent
@@ -50,7 +51,7 @@ from app.services.agent.tools.skills import SKILL_TOOL_NAMES
 from app.services.agent import file_store, knowledge_store
 from app.services.hitl import get_hitl_engine
 from app.services.providers.base import ProviderError
-from app.services.providers.factory import get_provider
+from app.services.providers.factory import get_provider_for_agent
 from app.services.trace_collector import Tracer
 from app.ws.traces import manager as ws_manager
 
@@ -148,7 +149,7 @@ async def _build_runner(
             )
 
     try:
-        provider = await get_provider(db, ctx.org_id, config.provider)  # type: ignore[arg-type]
+        provider = await get_provider_for_agent(db, agent)
     except AppError:
         raise
 
@@ -243,6 +244,8 @@ async def create_agent(
         hitl_tool_names=body.hitl_tool_names,
         file_system_enabled=body.file_system_enabled,
         is_active=True,
+        endpoint_url=(body.endpoint_url or None),
+        endpoint_api_key=encrypt_value(body.endpoint_api_key) if body.endpoint_api_key else None,
     )
     db.add(agent)
     await db.commit()
@@ -427,8 +430,12 @@ async def update_agent(
     # description and max_tokens are nullable columns — allow explicit null.
     # All other Agent columns are NOT NULL; silently skip null values here so
     # a PATCH with {"name": null} doesn't crash the DB with a constraint error.
-    _NULLABLE_FIELDS = {"description", "max_tokens"}
+    _NULLABLE_FIELDS = {"description", "max_tokens", "endpoint_url"}
     update_fields = body.model_dump(exclude_unset=True)
+    # F7.1: endpoint_api_key özel — şifrele; boş/None → temizle
+    if "endpoint_api_key" in update_fields:
+        raw_key = update_fields.pop("endpoint_api_key")
+        agent.endpoint_api_key = encrypt_value(raw_key) if raw_key else None
     for field_name, value in update_fields.items():
         if value is None and field_name not in _NULLABLE_FIELDS:
             continue

@@ -99,6 +99,40 @@ async def test_create_agent_as_admin(owner_client):
 
 
 @pytest.mark.asyncio
+async def test_create_http_agent_requires_endpoint(owner_client):
+    """F7.1: provider='http' endpoint_url olmadan → 422."""
+    client, _, _ = owner_client
+    resp = await client.post("/agents", json={
+        "name": "http-no-url",
+        "system_prompt": "x",
+        "provider": "http",
+        "model": "external-agent",
+    })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_http_agent_succeeds_and_hides_key(owner_client):
+    """F7.1: http agent endpoint + key ile oluşur; key yanıtta sızdırılmaz."""
+    client, _, _ = owner_client
+    resp = await client.post("/agents", json={
+        "name": "http-agent",
+        "system_prompt": "x",
+        "provider": "http",
+        "model": "external-agent",
+        "endpoint_url": "http://my-agent:9000/v1",
+        "endpoint_api_key": "secret-key-123",
+    })
+    assert resp.status_code == 201
+    data = assert_success(resp.json())
+    assert data["provider"] == "http"
+    assert data["endpoint_url"] == "http://my-agent:9000/v1"
+    assert data["has_endpoint_api_key"] is True
+    # ham key hiçbir alanda görünmemeli
+    assert "secret-key-123" not in str(data)
+
+
+@pytest.mark.asyncio
 async def test_create_agent_member_forbidden(client: AsyncClient):
     """Member rolündeki kullanıcı agent oluşturamaz → 403."""
     from tests.integration.auth_helpers import add_member

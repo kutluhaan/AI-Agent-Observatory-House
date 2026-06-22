@@ -25,7 +25,7 @@ from app.services.providers.openai_provider import OpenAIProvider
 
 settings = get_settings()
 
-SUPPORTED_PROVIDERS = {"openai", "anthropic", "gemini", "ollama", "custom"}
+SUPPORTED_PROVIDERS = {"openai", "anthropic", "gemini", "ollama", "custom", "http"}
 
 
 async def get_provider(
@@ -66,6 +66,14 @@ async def get_provider(
                 404,
             )
         return OllamaProvider(base_url=base_url)
+
+    if provider_name == "http":
+        # F7.1: per-agent endpoint — org düzeyinde kurulamaz; get_provider_for_agent kullan.
+        raise AppError(
+            "PROVIDER_NOT_CONFIGURED",
+            "HTTP provider is per-agent; configure endpoint_url on the agent.",
+            404,
+        )
 
     if provider_name == "custom":
         # OpenAI-uyumlu self-hosted endpoint (F3). base_url zorunlu, api_key opsiyonel.
@@ -108,3 +116,21 @@ async def get_provider(
     if provider_name == "gemini":
         return GeminiProvider(api_key=api_key)
     return AnthropicProvider(api_key=api_key)
+
+
+async def get_provider_for_agent(db: AsyncSession, agent) -> BaseLLMProvider:
+    """Bir agent için provider kurar.
+
+    provider='http' (F7.1) ise agent'a kayıtlı per-agent endpoint (OpenAI-uyumlu)
+    kullanılır; aksi halde org/platform çözümlemesi (get_provider).
+    """
+    if agent.provider == "http":
+        if not agent.endpoint_url:
+            raise AppError(
+                "PROVIDER_NOT_CONFIGURED",
+                "HTTP agent has no endpoint_url configured.",
+                404,
+            )
+        api_key = decrypt_value(agent.endpoint_api_key) if agent.endpoint_api_key else None
+        return OpenAIProvider(api_key=api_key or "not-needed", base_url=agent.endpoint_url)
+    return await get_provider(db, agent.organization_id, agent.provider)

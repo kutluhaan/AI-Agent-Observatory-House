@@ -24,7 +24,11 @@ const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "ollama", label: "Ollama (local)" },
   { value: "custom", label: "Custom (OpenAI-uyumlu, self-hosted)" },
+  { value: "http", label: "External agent (HTTP, OpenAI-uyumlu)" },
 ];
+
+// Serbest-metin model + endpoint gerektiren provider'lar
+const FREE_MODEL_PROVIDERS = new Set(["custom", "http"]);
 
 const MODELS_BY_PROVIDER: Record<string, string[]> = {
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro"],
@@ -50,6 +54,8 @@ export interface AgentFormValues {
   tool_names: string[];
   hitl_tool_names: string[];
   file_system_enabled: boolean;
+  endpoint_url?: string | null;
+  endpoint_api_key?: string | null;
 }
 
 export function AgentForm({
@@ -70,6 +76,8 @@ export function AgentForm({
   const [selected, setSelected] = useState<Set<string>>(new Set(initial?.tool_names ?? []));
   const [hitl, setHitl] = useState<Set<string>>(new Set(initial?.hitl_tool_names ?? []));
   const [fileSystem, setFileSystem] = useState(initial?.file_system_enabled ?? false);
+  const [endpointUrl, setEndpointUrl] = useState(initial?.endpoint_url ?? "");
+  const [endpointApiKey, setEndpointApiKey] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -132,6 +140,9 @@ export function AgentForm({
         tool_names: Array.from(selected),
         hitl_tool_names: Array.from(hitl),
         file_system_enabled: fileSystem,
+        // F7.1: http agent endpoint (yalnız http için anlamlı). Key boşsa gönderme (mevcut korunur).
+        endpoint_url: provider === "http" ? endpointUrl : null,
+        ...(endpointApiKey ? { endpoint_api_key: endpointApiKey } : {}),
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "İşlem başarısız oldu.");
@@ -174,17 +185,45 @@ export function AgentForm({
             setModel(MODELS_BY_PROVIDER[v]?.[0] ?? "");
           }}
         />
-        {provider === "custom" ? (
+        {FREE_MODEL_PROVIDERS.has(provider) ? (
           <Input
             label="Model"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="gpt-oss-20b"
+            placeholder={provider === "http" ? "external-agent" : "gpt-oss-20b"}
           />
         ) : (
           <Dropdown label="Model" value={model} options={modelOptions} onChange={setModel} />
         )}
       </div>
+
+      {/* F7.1: external HTTP agent — per-agent endpoint */}
+      {provider === "http" && (
+        <div className="flex flex-col gap-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3">
+          <p className="text-xs text-zinc-400">
+            Dış agent&apos;ı <span className="text-zinc-200">OpenAI-uyumlu</span> bir HTTP endpoint
+            üzerinden çağırır (POST <code className="text-indigo-300">/chat/completions</code>).
+            Endpoint kendi mantığını/araçlarını çalıştırır; platform input gönderir, çıktı alır.
+          </p>
+          <Input
+            label="Endpoint URL (base, OpenAI-uyumlu)"
+            value={endpointUrl}
+            onChange={(e) => setEndpointUrl(e.target.value)}
+            placeholder="http://my-agent:9000/v1"
+          />
+          <Input
+            label="API anahtarı (opsiyonel)"
+            type="password"
+            value={endpointApiKey}
+            onChange={(e) => setEndpointApiKey(e.target.value)}
+            placeholder={initial?.endpoint_url ? "•••• (değiştirmek için yaz)" : "gerekmiyorsa boş bırak"}
+          />
+          <p className="text-[11px] text-zinc-600">
+            Docker&apos;dan erişim: aynı makinedeyse <code>host.docker.internal</code>, LAN/uzak
+            sunucuysa IP/hostname. URL&apos;e gerekiyorsa <code>/v1</code> ekle.
+          </p>
+        </div>
+      )}
       {provider === "custom" && (
         <p className="-mt-2 text-xs text-zinc-500">
           Endpoint URL&apos;ini <code className="text-indigo-300">.env</code>&apos;deki{" "}

@@ -239,7 +239,7 @@ async def _run_sub_agent(ctx: ToolContext, agent_id: str, user_input: str) -> st
     from app.models.agent import Agent
     from app.services.agent.base import AgentConfig
     from app.services.agent.runner import AgentRunner
-    from app.services.providers.factory import get_provider
+    from app.services.providers.factory import get_provider_for_agent
     from app.services.trace_collector import Tracer
 
     try:
@@ -273,7 +273,7 @@ async def _run_sub_agent(ctx: ToolContext, agent_id: str, user_input: str) -> st
         hitl_tool_names=agent_row.hitl_tool_names or [],
     )
 
-    provider = await get_provider(ctx.db, ctx.org_id, config.provider)
+    provider = await get_provider_for_agent(ctx.db, agent_row)
 
     sub_tracer = Tracer(
         redis=ctx.redis,

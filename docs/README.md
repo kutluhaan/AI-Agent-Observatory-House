@@ -30,6 +30,7 @@ belgelenir.
 ### Ajan & Araçlar
 - [Tool kategorileri](features/tool-categories.md) — file/web/finance/operation/self; kategori bazlı seçim
 - [Custom model (OpenAI-uyumlu)](features/custom-model-provider.md) — self-hosted endpoint + Providers ayar sayfası
+- [External agent (HTTP invoke)](features/http-agent.md) — dış agent'ı OpenAI-uyumlu HTTP ile çağır (F7.1)
 - [Agent performans paneli](features/agent-performance-panel.md) — agent başına birleşik test performansı (F5.1)
 - [Org dashboard & bilgi-etkisi](features/org-dashboard.md) — org özeti + agent sıralaması + RAG trendi (F5.2/F5.3)
 

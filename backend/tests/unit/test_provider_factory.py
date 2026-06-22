@@ -235,7 +235,48 @@ async def test_factory_ollama_raises_when_no_base_url(monkeypatch):
 
 
 def test_supported_providers_set():
-    assert SUPPORTED_PROVIDERS == {"openai", "anthropic", "gemini", "ollama", "custom"}
+    assert SUPPORTED_PROVIDERS == {"openai", "anthropic", "gemini", "ollama", "custom", "http"}
+
+
+@pytest.mark.asyncio
+async def test_get_provider_for_agent_http_uses_endpoint():
+    """F7.1: provider='http' → agent endpoint'iyle OpenAIProvider."""
+    from types import SimpleNamespace
+    from app.services.providers.factory import get_provider_for_agent
+
+    agent = SimpleNamespace(
+        provider="http", endpoint_url="http://ext-agent:9000/v1",
+        endpoint_api_key=None, organization_id=uuid.uuid4(),
+    )
+    provider = await get_provider_for_agent(AsyncMock(), agent)
+    assert isinstance(provider, OpenAIProvider)
+    assert str(provider._client.base_url).startswith("http://ext-agent:9000/v1")
+
+
+@pytest.mark.asyncio
+async def test_get_provider_for_agent_http_requires_url():
+    from types import SimpleNamespace
+    from app.services.providers.factory import get_provider_for_agent
+
+    agent = SimpleNamespace(
+        provider="http", endpoint_url=None, endpoint_api_key=None,
+        organization_id=uuid.uuid4(),
+    )
+    with pytest.raises(AppError) as exc:
+        await get_provider_for_agent(AsyncMock(), agent)
+    assert exc.value.code == "PROVIDER_NOT_CONFIGURED"
+
+
+@pytest.mark.asyncio
+async def test_get_provider_for_agent_http_requires_url_via_factory():
+    """get_provider doğrudan 'http' ile çağrılırsa per-agent uyarısı verir."""
+    db = AsyncMock()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=result_mock)
+    with pytest.raises(AppError) as exc:
+        await get_provider(db, uuid.uuid4(), "http")
+    assert exc.value.code == "PROVIDER_NOT_CONFIGURED"
 
 
 @pytest.mark.asyncio

@@ -108,7 +108,8 @@ async def list_provider_credentials(
             "base_url": credentials[p].base_url if p in credentials else None,
             "updated_at": credentials[p].updated_at.isoformat() if p in credentials else None,
         }
-        for p in sorted(SUPPORTED_PROVIDERS)
+        # 'http' per-agent endpoint'tir (agent'ta yapılandırılır), org sağlayıcısı değil
+        for p in sorted(SUPPORTED_PROVIDERS) if p != "http"
     ])
 
 

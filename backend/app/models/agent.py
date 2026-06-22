@@ -54,8 +54,11 @@ class Agent(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
 
-    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # openai | anthropic | ollama
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # openai | anthropic | gemini | ollama | custom | http
     model: Mapped[str] = mapped_column(String(200), nullable=False)
+    # F7.1: provider='http' — dış (self-hosted) OpenAI-uyumlu agent endpoint'i (per-agent)
+    endpoint_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    endpoint_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet ile şifreli
     temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
     max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

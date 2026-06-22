@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.test_suite import TestCase, TestCaseResult, TestRun
 from app.services.agent.base import AgentConfig, AgentError
-from app.services.providers.factory import get_provider
+from app.services.providers.factory import get_provider_for_agent
 from app.services.test_suite.assertions import SandboxResult, evaluate_all
 from app.services.test_suite.rag_evaluator import evaluate_rag
 from app.services.test_suite.sandbox import AgentSandbox
@@ -76,7 +76,7 @@ async def run_case(
 
     # Provider yükle
     try:
-        provider = await get_provider(db, run.organization_id, agent_row.provider)
+        provider = await get_provider_for_agent(db, agent_row)
     except Exception as exc:
         return await _save_result(
             db, run.id, case.id,
