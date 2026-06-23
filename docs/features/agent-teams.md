@@ -75,6 +75,12 @@ Ekibin nasıl çalıştığını **canlı ve minimal** izlersin:
   `timeout_seconds = team.run_timeout_seconds` kullanır (üyeler kendi `agent.timeout_seconds`).
 - **Delegasyon bütçesi:** `delegate` tool'u, run'daki `kind="delegate"` mesaj sayısını
   `team.max_delegations` ile kıyaslar; aşılırsa delege etmeden "team_board ile sentezle, final ver" mesajı döner.
+- **Bütçe-farkındalığı (önemli):** `build_member_runner`, her üyenin system prompt'una
+  `--- ÇALIŞMA BÜTÇEN ---` bloğunu **dinamik** ekler (gerçek `max_delegations`/`max_steps`/süre
+  değerleriyle). Coordinator açıkça "EN FAZLA N delege; N'den sonra delegate CEVAP DÖNDÜRMEZ;
+  limite yaklaşınca team_board'dan sentezle" uyarısını görür. Sayı statik değil — ekip ayarı
+  değişince prompt da otomatik güncellenir. Yani limit hem **prompt'ta bildirilir** (önleyici)
+  hem de `delegate`'te **zorlanır** (kesin).
 - **Roller netleştirilmeli:** `delegate(role, ...)` ROL ile çalışır — her uzman rol
   (researcher/worker/evaluator/planner) ayrı atanmalı; iki üyeye aynı rol verilirse
   Coordinator yalnız ilkine ulaşır (yaygın hata, timeout sebebi olabilir).

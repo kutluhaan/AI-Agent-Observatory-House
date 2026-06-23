@@ -111,6 +111,27 @@ async def build_member_runner(
     parts = [agent.system_prompt, f"--- TEAM ROLE: {ROLE_LABELS.get(member.role, member.role)} ---\n{member.role_prompt}", roster]
     if shared:
         parts.append(f"--- TEAM INSTRUCTIONS (tüm ekip) ---\n{shared}")
+
+    # Bütçe-farkındalığı: ajanın gerçek limitlerini prompt'a dinamik enjekte et
+    # (sayı statik değil; team ayarı değişince prompt da değişir). Ajan limiti BİLEREK çalışsın.
+    max_deleg = (getattr(team, "max_delegations", 12) or 12) if team else 12
+    run_to = (getattr(team, "run_timeout_seconds", 600) or 600) if team else 600
+    if is_coordinator:
+        parts.append(
+            "--- ÇALIŞMA BÜTÇEN (kesin sınır, uy!) ---\n"
+            f"• Bu çalıştırmada EN FAZLA {max_deleg} kez delege edebilirsin (delegate çağrısı).\n"
+            f"• {max_deleg}. delegeden sonra delegate çağrıların CEVAP DÖNDÜRMEZ — bunu bilerek planla: "
+            "aynı işi iki kez delege etme, her delegede net ve tek bir görev ver.\n"
+            "• Limite yaklaştığında DUR; team_board() ile eldeki bulgulardan FİNAL raporu sentezle.\n"
+            f"• En fazla {agent.max_steps} düşünme adımın ve toplam {run_to}s süren var — idareli kullan."
+        )
+    else:
+        parts.append(
+            "--- ÇALIŞMA BÜTÇEN (kesin sınır, uy!) ---\n"
+            f"En fazla {agent.max_steps} adımın ve {agent.timeout_seconds}s süren var. Kısa ve odaklı çalış; "
+            "gereksiz/tekrarlı tool çağrısı yapma, yeterli bilgi toplanınca DUR ve sonucu döndür."
+        )
+
     system_prompt = "\n\n".join(p for p in parts if p)
 
     # Üyenin kendi tool'ları + ekip tool'ları (+ FS açıksa dosya tool'ları)

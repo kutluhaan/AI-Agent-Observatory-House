@@ -131,6 +131,36 @@ async def test_team_budgets_create_and_patch(owner_client):
 
 
 @pytest.mark.asyncio
+async def test_budget_awareness_injected_into_prompt(owner_client):
+    """Bütçe ajanın prompt'una dinamik enjekte edilir — ajan limiti BİLEREK çalışır."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.core.database import AsyncSessionLocal
+    from app.models.team import Team, TeamMember
+    from app.services.team.executor import build_member_runner
+
+    client, _, _ = owner_client
+    body = await _team(client)
+    body |= {"max_delegations": 7}
+    tid = assert_success((await client.post("/teams", json=body)).json())["id"]
+
+    async with AsyncSessionLocal() as db:
+        team = (await db.execute(
+            select(Team).where(Team.id == uuid.UUID(tid))
+            .options(selectinload(Team.members).selectinload(TeamMember.agent))
+        )).scalar_one()
+        coord = next(m for m in team.members if m.role == "coordinator")
+        worker = next(m for m in team.members if m.role == "worker")
+        rc = await build_member_runner(db, None, coord, list(team.members), org_id=team.organization_id, team_id=team.id, team_run_id=team.id)
+        rw = await build_member_runner(db, None, worker, list(team.members), org_id=team.organization_id, team_id=team.id, team_run_id=team.id)
+
+    cp = rc.config.system_prompt
+    assert "ÇALIŞMA BÜTÇEN" in cp and "EN FAZLA 7" in cp and "CEVAP DÖNDÜRMEZ" in cp  # coordinator delege limitini bilir
+    assert "ÇALIŞMA BÜTÇEN" in rw.config.system_prompt  # üye de kendi adım/süre bütçesini bilir
+
+
+@pytest.mark.asyncio
 async def test_team_chat_conversation(owner_client):
     """B3: aynı conversation_id ile çok-turlu; listeleme + tur getirme."""
     client, _, _ = owner_client
