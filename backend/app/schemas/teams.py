@@ -20,6 +20,9 @@ class CreateTeamRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=200)]
     description: str | None = None
     members: Annotated[list[TeamMemberInput], Field(min_length=1)]
+    shared_instructions: str | None = None
+    max_delegations: Annotated[int, Field(ge=1, le=50)] = 12
+    run_timeout_seconds: Annotated[int, Field(ge=30, le=3600)] = 600
 
     @model_validator(mode="after")
     def _require_coordinator(self):
@@ -33,6 +36,9 @@ class UpdateTeamRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=200)] | None = None
     description: str | None = None
     members: list[TeamMemberInput] | None = None
+    shared_instructions: str | None = None
+    max_delegations: Annotated[int, Field(ge=1, le=50)] | None = None
+    run_timeout_seconds: Annotated[int, Field(ge=30, le=3600)] | None = None
 
     @model_validator(mode="after")
     def _coordinator_if_members(self):
@@ -63,6 +69,9 @@ class TeamResponse(BaseModel):
     name: str
     description: str | None
     members: list[TeamMemberResponse]
+    shared_instructions: str | None
+    max_delegations: int
+    run_timeout_seconds: int
     created_at: str
     updated_at: str
 
@@ -71,6 +80,9 @@ class TeamResponse(BaseModel):
         return cls(
             id=t.id, name=t.name, description=t.description,
             members=[TeamMemberResponse.from_orm(m) for m in t.members],
+            shared_instructions=t.shared_instructions,
+            max_delegations=t.max_delegations,
+            run_timeout_seconds=t.run_timeout_seconds,
             created_at=t.created_at.isoformat(), updated_at=t.updated_at.isoformat(),
         )
 

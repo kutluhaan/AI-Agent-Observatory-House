@@ -18,6 +18,9 @@ export default function NewTeamPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [members, setMembers] = useState<TeamMemberInput[]>([]);
+  const [sharedInstructions, setSharedInstructions] = useState("");
+  const [maxDelegations, setMaxDelegations] = useState(10);
+  const [runTimeout, setRunTimeout] = useState(600);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,7 +56,11 @@ export default function NewTeamPage() {
     setError("");
     setSubmitting(true);
     try {
-      const team = await api.post<Team>("/teams", { name, description: description || null, members });
+      const team = await api.post<Team>("/teams", {
+        name, description: description || null, members,
+        shared_instructions: sharedInstructions || null,
+        max_delegations: maxDelegations, run_timeout_seconds: runTimeout,
+      });
       router.replace(`/teams/${team.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Oluşturulamadı.");
@@ -96,6 +103,27 @@ export default function NewTeamPage() {
             <Textarea label="Rol promptu" value={m.role_prompt ?? ""} onChange={(e) => setMember(i, { role_prompt: e.target.value })} rows={3} className="text-xs" />
           </div>
         ))}
+
+        {/* Ekip promptu + bütçeler */}
+        <div className="flex flex-col gap-3 rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+          <p className="text-xs font-medium text-zinc-300">Ekip ayarları (bütçe & ortak prompt)</p>
+          <Textarea
+            label="Ekip promptu (tüm üyelere eklenir)"
+            value={sharedInstructions}
+            onChange={(e) => setSharedInstructions(e.target.value)}
+            rows={3}
+            className="text-xs"
+            placeholder="Ortak kurallar: kısa/odaklı çalış, az arama yap, Türkçe yaz, kaynak belirt…"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Max delege (iletişim bütçesi)" type="number" value={String(maxDelegations)} onChange={(e) => setMaxDelegations(Math.max(1, Math.min(50, Number(e.target.value) || 10)))} />
+            <Input label="Çalışma üst süresi (sn)" type="number" value={String(runTimeout)} onChange={(e) => setRunTimeout(Math.max(30, Math.min(3600, Number(e.target.value) || 600)))} />
+          </div>
+          <p className="text-[11px] text-zinc-600">
+            Max delege: Coordinator bir çalıştırmada en fazla kaç kez delege edebilir (sonsuz tur/token israfını önler).
+            Üst süre: tüm ekip çalıştırması için tavan.
+          </p>
+        </div>
 
         <Button type="submit" size="lg" loading={submitting} disabled={!valid} className="mt-2">Ekibi oluştur</Button>
       </form>

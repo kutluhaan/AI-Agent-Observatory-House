@@ -29,6 +29,10 @@ class Team(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # B3+: ekip promptu (tüm üyelere eklenir) + bütçeler (run'lar uzamasın/token tüketmesin)
+    shared_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_delegations: Mapped[int] = mapped_column(Integer, nullable=False, default=12, server_default="12")
+    run_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600, server_default="600")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

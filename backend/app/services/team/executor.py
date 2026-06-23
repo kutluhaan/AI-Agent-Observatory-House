@@ -102,12 +102,16 @@ async def build_member_runner(
         raise ValueError(f"Team member agent '{member.agent_id}' not found.")
 
     is_coordinator = member.role == COORDINATOR
+    # Ekip ayarları (B3+): ortak prompt + bütçeler
+    from app.models.team import Team
+    team = (await db.execute(select(Team).where(Team.id == team_id))).scalar_one_or_none()
+    shared = (getattr(team, "shared_instructions", None) or "").strip() if team else ""
+
     roster = build_roster_text(members, member.role)
-    system_prompt = (
-        f"{agent.system_prompt}\n\n"
-        f"--- TEAM ROLE: {ROLE_LABELS.get(member.role, member.role)} ---\n"
-        f"{member.role_prompt}\n\n{roster}"
-    )
+    parts = [agent.system_prompt, f"--- TEAM ROLE: {ROLE_LABELS.get(member.role, member.role)} ---\n{member.role_prompt}", roster]
+    if shared:
+        parts.append(f"--- TEAM INSTRUCTIONS (tüm ekip) ---\n{shared}")
+    system_prompt = "\n\n".join(p for p in parts if p)
 
     # Üyenin kendi tool'ları + ekip tool'ları (+ FS açıksa dosya tool'ları)
     tools = list(agent.tool_names or [])
@@ -119,6 +123,9 @@ async def build_member_runner(
                 hitl.append(t)
     tools += _COORDINATOR_TOOLS if is_coordinator else _MEMBER_TOOLS
 
+    # Coordinator tüm orkestrasyonu sarar → ekip-seviye üst süre; üyeler kendi timeout'u
+    timeout = (getattr(team, "run_timeout_seconds", None) or 600) if is_coordinator else agent.timeout_seconds
+
     config = AgentConfig(
         agent_id=agent.id,
         org_id=org_id,
@@ -129,7 +136,7 @@ async def build_member_runner(
         temperature=agent.temperature,
         max_tokens=agent.max_tokens,
         max_steps=agent.max_steps,
-        timeout_seconds=agent.timeout_seconds,
+        timeout_seconds=timeout,
         tool_names=tools,
         hitl_tool_names=[],  # ekip çalıştırmasında HITL devre dışı (otomatik akış)
     )

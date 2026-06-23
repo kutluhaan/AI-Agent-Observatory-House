@@ -88,6 +88,8 @@ async def create_team(
     team = Team(
         id=uuid.uuid4(), organization_id=ctx.org_id, created_by=ctx.user_id,
         name=body.name, description=body.description,
+        shared_instructions=body.shared_instructions,
+        max_delegations=body.max_delegations, run_timeout_seconds=body.run_timeout_seconds,
     )
     db.add(team)
     await db.flush()
@@ -129,6 +131,12 @@ async def update_team(
         team.name = body.name
     if body.description is not None:
         team.description = body.description
+    if body.shared_instructions is not None:
+        team.shared_instructions = body.shared_instructions or None
+    if body.max_delegations is not None:
+        team.max_delegations = body.max_delegations
+    if body.run_timeout_seconds is not None:
+        team.run_timeout_seconds = body.run_timeout_seconds
     if body.members is not None:
         await _validate_member_agents(body.members, ctx.org_id, db)
         for old in list(team.members):

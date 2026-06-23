@@ -43,6 +43,22 @@ def register_team_tools() -> None:
         if ctx.current_role != COORDINATOR:
             return "[delegate error: only the coordinator can delegate]"
 
+        # Bütçe: iletişim limiti (sektör pratiği — sonsuz delege/token israfını önler)
+        from sqlalchemy import func
+        from app.models.team import Team, TeamRunMessage
+        team = (await ctx.db.execute(select(Team).where(Team.id == ctx.team_id))).scalar_one_or_none()
+        cap = (getattr(team, "max_delegations", 12) or 12)
+        used = (await ctx.db.execute(
+            select(func.count()).select_from(TeamRunMessage).where(
+                TeamRunMessage.team_run_id == ctx.team_run_id, TeamRunMessage.kind == "delegate",
+            )
+        )).scalar() or 0
+        if used >= cap:
+            return (
+                f"[delegation budget reached ({cap}). Do NOT delegate further. Read the shared board "
+                "with team_board() and synthesize the final answer NOW from the results gathered so far.]"
+            )
+
         members = (await ctx.db.execute(
             select(TeamMember).where(TeamMember.team_id == ctx.team_id).options(selectinload(TeamMember.agent))
         )).scalars().all()

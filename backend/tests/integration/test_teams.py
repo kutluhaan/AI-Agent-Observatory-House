@@ -112,6 +112,25 @@ async def test_run_detail_not_found(owner_client):
 
 
 @pytest.mark.asyncio
+async def test_team_budgets_create_and_patch(owner_client):
+    """B3+: ekip promptu + bütçeler create/patch + varsayılanlar + sınır."""
+    client, _, _ = owner_client
+    body = await _team(client)
+    body |= {"shared_instructions": "Kısa çalış.", "max_delegations": 5, "run_timeout_seconds": 300}
+    t = assert_success((await client.post("/teams", json=body)).json())
+    assert t["shared_instructions"] == "Kısa çalış." and t["max_delegations"] == 5 and t["run_timeout_seconds"] == 300
+
+    t2 = assert_success((await client.post("/teams", json=await _team(client))).json())
+    assert t2["max_delegations"] == 12 and t2["run_timeout_seconds"] == 600  # varsayılanlar
+
+    upd = assert_success((await client.patch(f"/teams/{t['id']}", json={"max_delegations": 8, "shared_instructions": ""})).json())
+    assert upd["max_delegations"] == 8 and upd["shared_instructions"] is None
+
+    bad = await client.patch(f"/teams/{t['id']}", json={"max_delegations": 999})
+    assert bad.status_code == 422  # sınır ihlali
+
+
+@pytest.mark.asyncio
 async def test_team_chat_conversation(owner_client):
     """B3: aynı conversation_id ile çok-turlu; listeleme + tur getirme."""
     client, _, _ = owner_client
