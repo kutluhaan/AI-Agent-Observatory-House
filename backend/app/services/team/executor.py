@@ -137,6 +137,8 @@ async def build_member_runner(
 
     from app.services.mcp.resolver import resolve_agent_mcp_tools
     mcp_tools = await resolve_agent_mcp_tools(db, agent)
+    from app.services.agent.custom_tools import resolve_agent_custom_tools
+    http_tools = await resolve_agent_custom_tools(db, agent)
 
     tracer = Tracer(
         redis=redis,
@@ -160,5 +162,6 @@ async def build_member_runner(
         tracer=tracer,
         tool_context=tool_context,
         mcp_tools=mcp_tools,
+        http_tools=http_tools,
         on_tool=on_tool if on_tool is not None else make_tool_recorder(db, team_run_id, member.role, org_id),
     )

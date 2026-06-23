@@ -73,6 +73,8 @@ class Agent(Base):
 
     # F7.2: bu agent'ın kullanabileceği MCP tool'ları [{server_id, tool_name}]
     mcp_tools: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # B1: bu agent'ın kullanabileceği org custom tool id'leri ["uuid", ...]
+    custom_tool_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # İzole dosya sistemi açık mı — açıksa file tool'ları otomatik eklenir
     file_system_enabled: Mapped[bool] = mapped_column(

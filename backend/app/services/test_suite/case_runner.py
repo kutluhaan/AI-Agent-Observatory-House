@@ -105,8 +105,11 @@ async def run_case(
     # F7.2: agent'ın MCP tool'larını çözümle
     from app.services.mcp.resolver import resolve_agent_mcp_tools
     mcp_tools = await resolve_agent_mcp_tools(db, agent_row)
+    # B1: custom HTTP tool'ları
+    from app.services.agent.custom_tools import resolve_agent_custom_tools
+    http_tools = await resolve_agent_custom_tools(db, agent_row)
 
-    sandbox = AgentSandbox(config=config, provider=provider, redis=redis, db=db, mcp_tools=mcp_tools)
+    sandbox = AgentSandbox(config=config, provider=provider, redis=redis, db=db, mcp_tools=mcp_tools, http_tools=http_tools)
 
     # F6: senaryo modu — case'in steps'i varsa çok-turlu çalıştır (checkpoint'ler)
     if getattr(case, "steps", None):

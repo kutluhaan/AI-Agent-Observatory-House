@@ -47,12 +47,14 @@ class AgentSandbox:
         redis: aioredis.Redis,
         db: Any | None = None,
         mcp_tools: list[dict] | None = None,  # F7.2
+        http_tools: list[dict] | None = None,  # B1
     ) -> None:
         self.config = config
         self.provider = provider
         self.redis = redis
         self.db = db
         self.mcp_tools = mcp_tools or []
+        self.http_tools = http_tools or []
 
     async def run(
         self,
@@ -86,6 +88,7 @@ class AgentSandbox:
             tracer=tracer,
             tool_context=tool_context,
             mcp_tools=self.mcp_tools,
+            http_tools=self.http_tools,
         )
 
         # Synthetic history inject et

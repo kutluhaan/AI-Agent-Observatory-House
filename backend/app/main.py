@@ -199,6 +199,9 @@ app.include_router(connections_router, prefix="/connections", tags=["connections
 from app.ws.team_runs import router as team_runs_ws_router
 app.include_router(team_runs_ws_router, prefix="/ws", tags=["ws"])
 
+from app.api.v1.custom_tools import router as custom_tools_router
+app.include_router(custom_tools_router, prefix="/custom-tools", tags=["custom-tools"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])

@@ -156,6 +156,9 @@ async def _build_runner(
     # F7.2: agent'ın MCP tool'larını çözümle (uzak sunucu URL/key dahil)
     from app.services.mcp.resolver import resolve_agent_mcp_tools
     mcp_tools = await resolve_agent_mcp_tools(db, agent)
+    # B1: agent'ın custom HTTP tool'larını çözümle
+    from app.services.agent.custom_tools import resolve_agent_custom_tools
+    http_tools = await resolve_agent_custom_tools(db, agent)
 
     tracer = Tracer(
         redis=redis,
@@ -187,6 +190,7 @@ async def _build_runner(
         ws_manager=ws_manager,
         history=history,
         mcp_tools=mcp_tools,
+        http_tools=http_tools,
     )
 
 
@@ -253,6 +257,7 @@ async def create_agent(
         endpoint_url=(body.endpoint_url or None),
         endpoint_api_key=encrypt_value(body.endpoint_api_key) if body.endpoint_api_key else None,
         mcp_tools=body.mcp_tools or None,
+        custom_tool_ids=[str(i) for i in body.custom_tool_ids] if body.custom_tool_ids else None,
     )
     db.add(agent)
     await db.commit()
@@ -437,12 +442,16 @@ async def update_agent(
     # description and max_tokens are nullable columns — allow explicit null.
     # All other Agent columns are NOT NULL; silently skip null values here so
     # a PATCH with {"name": null} doesn't crash the DB with a constraint error.
-    _NULLABLE_FIELDS = {"description", "max_tokens", "endpoint_url", "mcp_tools"}
+    _NULLABLE_FIELDS = {"description", "max_tokens", "endpoint_url", "mcp_tools", "custom_tool_ids"}
     update_fields = body.model_dump(exclude_unset=True)
     # F7.1: endpoint_api_key özel — şifrele; boş/None → temizle
     if "endpoint_api_key" in update_fields:
         raw_key = update_fields.pop("endpoint_api_key")
         agent.endpoint_api_key = encrypt_value(raw_key) if raw_key else None
+    # B1: custom_tool_ids — UUID listesi JSONB için str'e çevrilir
+    if "custom_tool_ids" in update_fields:
+        ids = update_fields.pop("custom_tool_ids")
+        agent.custom_tool_ids = [str(i) for i in ids] if ids else None
     for field_name, value in update_fields.items():
         if value is None and field_name not in _NULLABLE_FIELDS:
             continue

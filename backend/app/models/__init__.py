@@ -22,6 +22,7 @@ from app.models.agent_knowledge import AgentKnowledge
 from app.models.mcp import McpServer
 from app.models.team import Team, TeamMember, TeamRun, TeamRunMessage
 from app.models.connection import ServiceConnection
+from app.models.custom_tool import CustomTool
 
 __all__ = [
     "User",
@@ -48,4 +49,5 @@ __all__ = [
     "TeamRun",
     "TeamRunMessage",
     "ServiceConnection",
+    "CustomTool",
 ]

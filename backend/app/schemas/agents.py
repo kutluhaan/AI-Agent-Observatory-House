@@ -33,6 +33,8 @@ class CreateAgentRequest(BaseModel):
     endpoint_api_key: str | None = None
     # F7.2: kullanılacak MCP tool'ları [{server_id, tool_name, description?, input_schema?}]
     mcp_tools: list[dict] | None = None
+    # B1: kullanılacak custom tool id'leri
+    custom_tool_ids: list[uuid.UUID] | None = None
 
     @field_validator("provider")
     @classmethod
@@ -85,6 +87,7 @@ class UpdateAgentRequest(BaseModel):
     endpoint_url: Annotated[str | None, Field(max_length=500)] = None
     endpoint_api_key: str | None = None
     mcp_tools: list[dict] | None = None
+    custom_tool_ids: list[uuid.UUID] | None = None
 
     @field_validator("provider")
     @classmethod
@@ -136,6 +139,7 @@ class AgentResponse(BaseModel):
     endpoint_url: str | None
     has_endpoint_api_key: bool
     mcp_tools: list[dict] | None
+    custom_tool_ids: list[uuid.UUID] | None
     created_by: uuid.UUID | None
     created_at: str
     updated_at: str
@@ -160,6 +164,7 @@ class AgentResponse(BaseModel):
             endpoint_url=getattr(agent, "endpoint_url", None),
             has_endpoint_api_key=bool(getattr(agent, "endpoint_api_key", None)),
             mcp_tools=getattr(agent, "mcp_tools", None),
+            custom_tool_ids=getattr(agent, "custom_tool_ids", None),
             created_by=agent.created_by,
             created_at=agent.created_at.isoformat(),
             updated_at=agent.updated_at.isoformat(),

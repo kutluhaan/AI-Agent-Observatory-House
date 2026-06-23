@@ -86,6 +86,7 @@ class AgentRunner(BaseAgent):
         ws_manager: Any | None = None,   # ConnectionManager
         history: list[Message] | None = None,  # Önceki thread mesajları (çok-turlu hafıza)
         mcp_tools: list[dict] | None = None,  # F7.2: çözümlenmiş MCP tool'ları [{name, description, input_schema, url, api_key}]
+        http_tools: list[dict] | None = None,  # B1: çözümlenmiş custom HTTP tool'ları [{name, description, input_schema, method, url, headers, timeout}]
         on_tool: Any | None = None,  # C1: her tool çalıştıktan sonra çağrılan async callback(name, args, result)
     ) -> None:
         super().__init__(config)
@@ -99,6 +100,9 @@ class AgentRunner(BaseAgent):
         # F7.2: MCP tool'ları "mcp__{name}" olarak sunulur (native tool'larla çakışmaz)
         self._mcp_tools = mcp_tools or []
         self._mcp_by_name = {f"mcp__{t['name']}": t for t in self._mcp_tools}
+        # B1: custom HTTP tool'ları kendi adlarıyla sunulur (oluşturmada native'lerle çakışma engellenir)
+        self._http_tools = http_tools or []
+        self._http_by_name = {t["name"]: t for t in self._http_tools}
 
     # ─── Public API ───────────────────────────────────────
 
@@ -136,7 +140,7 @@ class AgentRunner(BaseAgent):
         Tool call sırasında stream'i duraklatan ve devam ettiren döngü.
         """
         messages = self._build_messages(user_input)
-        tool_defs = ToolRegistry.build_definitions(self.config.tool_names) + self._mcp_definitions()
+        tool_defs = ToolRegistry.build_definitions(self.config.tool_names) + self._mcp_definitions() + self._http_definitions()
         step = 0
         total_usage: dict[str, int] = {}
 
@@ -404,7 +408,7 @@ class AgentRunner(BaseAgent):
     async def _execute(self, user_input: str) -> AgentResult:
         """Blocking execution loop (run() tarafından kullanılır)."""
         messages = self._build_messages(user_input)
-        tool_defs = ToolRegistry.build_definitions(self.config.tool_names) + self._mcp_definitions()
+        tool_defs = ToolRegistry.build_definitions(self.config.tool_names) + self._mcp_definitions() + self._http_definitions()
         step = 0
         total_usage: dict[str, int] = {}
 
@@ -604,6 +608,17 @@ class AgentRunner(BaseAgent):
             for t in self._mcp_tools
         ]
 
+    def _http_definitions(self) -> list[ToolDefinition]:
+        """B1: custom HTTP tool'larını ToolDefinition'a çevirir."""
+        return [
+            ToolDefinition(
+                name=t["name"],
+                description=t.get("description") or f"Custom tool: {t['name']}",
+                parameters=t.get("input_schema") or {"type": "object", "properties": {}},
+            )
+            for t in self._http_tools
+        ]
+
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any] | str) -> str:
         """_execute_tool_inner'ı sarar; sonucu on_tool callback'ine (varsa) iletir (C1)."""
         result = await self._execute_tool_inner(tool_name, arguments)
@@ -636,6 +651,16 @@ class AgentRunner(BaseAgent):
             except Exception as exc:
                 logger.warning("agent.mcp_tool_error", tool=tool_name, error=str(exc))
                 return f"[MCP tool error: {exc}]"
+
+        # B1: custom HTTP tool'u mu? → kullanıcı tanımlı endpoint'e istek
+        http = self._http_by_name.get(tool_name)
+        if http is not None:
+            from app.services.agent.custom_tools import call_custom_tool
+            args = arguments if isinstance(arguments, dict) else {}
+            return await call_custom_tool(
+                method=http["method"], url=http["url"], headers=http.get("headers"),
+                arguments=args, timeout=http.get("timeout", 20),
+            )
 
         try:
             handler = ToolRegistry.get(tool_name)
