@@ -39,6 +39,24 @@ olarak saklar (şema config sırasında discovery'den alınır → çalışma an
 - Sunucu API key'i Fernet ile şifreli (`Authorization: Bearer`), yanıtta `has_api_key`.
 - Docker backend MCP sunucusuna ulaşabilmeli (host.docker.internal / IP).
 
+## Resmi MCP Registry'den keşif (D/#2)
+
+Kullanıcı [resmi MCP Registry](https://registry.modelcontextprotocol.io/) (açık katalog,
+API v0) üzerinden **mevcut MCP sunucularını arayıp tek tıkla** org'una ekler.
+
+- **Backend:** `app/services/mcp/registry.py` → `search_registry(q, limit)` registry'nin
+  `GET /v0/servers?search=` ucunu çağırır, her kaydı sadeleştirir. Registry yalnız
+  **metadata** barındırır (kod değil), bu yüzden sadece **keşif + uzak-remote ekleme** yapılır.
+- **Filtre:** Biz yalnız **Streamable HTTP remote**'u olan sunucuları çalıştırabildiğimizden,
+  her kayıt `addable` (HTTP remote var mı) ve `requires_auth` (gizli/zorunlu header var mı)
+  ile işaretlenir. stdio/npm-paket sunucuları "eklenebilir değil" görünür.
+- **Endpoint:** `GET /mcp-registry/search?q=&limit=` (member) → 502 `MCP_REGISTRY_UNREACHABLE`
+  registry'e ulaşılamazsa.
+- **Ekleme:** Seçilen sunucu mevcut `POST /mcp-servers` ile (ad = registry adının son
+  segmenti, url = HTTP remote, opsiyonel API anahtarı) eklenir — ayrı tablo/şema yok.
+- **UI:** `mcp-servers` sayfasında **"Registry'den keşfet"** → arama modalı → her sonuç:
+  ad/sürüm/açıklama/repo + **Ekle** (auth isteyenlerde inline API-anahtarı alanı).
+
 ## Entegrasyon noktaları
 
 | | Dosya |
@@ -48,6 +66,7 @@ olarak saklar (şema config sırasında discovery'den alınır → çalışma an
 | Model | `app/models/mcp.py` (`McpServer`) + `agents.mcp_tools` (migration `0019`) |
 | Runner | `app/services/agent/runner.py` (`_mcp_definitions`, `_execute_tool` routing) |
 | API | `app/api/v1/mcp_servers.py` (CRUD + discovery) |
+| Registry (D/#2) | `app/services/mcp/registry.py` + `app/api/v1/mcp_registry.py` |
 | UI — sunucular | `frontend/src/app/(app)/mcp-servers/page.tsx` + nav |
 | UI — agent | `frontend/src/components/agent-form.tsx` (`McpServerTools`) |
 | Bağımlılık | `mcp>=1.2.0` (pyproject) |

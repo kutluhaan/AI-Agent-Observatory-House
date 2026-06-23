@@ -236,6 +236,21 @@ async def get_team_conversation(team_id: uuid.UUID, conversation_id: uuid.UUID, 
     return success([TeamRunResponse.from_orm(r).model_dump() for r in runs])
 
 
+@router.delete("/{team_id}/conversations/{conversation_id}", status_code=204)
+async def delete_team_conversation(team_id: uuid.UUID, conversation_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    """B3: bir sohbeti (tüm turlarını) sil."""
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    runs = (await db.execute(
+        select(TeamRun).where(
+            TeamRun.team_id == team_id, TeamRun.organization_id == ctx.org_id,
+            TeamRun.conversation_id == conversation_id,
+        )
+    )).scalars().all()
+    for r in runs:
+        await db.delete(r)
+    await db.commit()
+
+
 @router.get("/{team_id}/stats")
 async def get_team_stats(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
     await _get_team_or_404(team_id, ctx.org_id, db)

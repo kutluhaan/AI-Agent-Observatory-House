@@ -179,3 +179,9 @@ async def test_team_chat_conversation(owner_client):
     runs = assert_success((await client.get(f"/teams/{tid}/conversations/{conv}")).json())
     assert len(runs) == 2
     assert [r["input"] for r in runs] == ["ilk soru", "ikinci soru"]  # eski → yeni
+
+    # silme → sohbet listeden kalkar
+    delr = await client.delete(f"/teams/{tid}/conversations/{conv}")
+    assert delr.status_code == 204
+    convs2 = assert_success((await client.get(f"/teams/{tid}/conversations")).json())
+    assert all(c["conversation_id"] != conv for c in convs2)

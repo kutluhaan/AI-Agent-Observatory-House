@@ -89,7 +89,7 @@ export default function TeamRunDetailPage() {
                   <StickyNote size={12} />
                   {m.title} <span className="text-zinc-600">· {m.from_role}</span>
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-400">{m.content}</p>
+                <div className="mt-1 text-xs text-zinc-400"><Markdown>{m.content}</Markdown></div>
               </div>
             ))}
           </div>
@@ -163,9 +163,9 @@ function MessageRow({ m }: { m: TeamRunMessage }) {
         <ChevronDown size={12} className={cn("ml-auto shrink-0 text-zinc-600 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <p className="max-h-72 overflow-y-auto whitespace-pre-wrap border-t border-zinc-800/60 px-3 py-2 text-xs text-zinc-300">
-          {m.content}
-        </p>
+        <div className="max-h-72 overflow-y-auto border-t border-zinc-800/60 px-3 py-2 text-xs text-zinc-300">
+          <Markdown>{m.content}</Markdown>
+        </div>
       )}
     </div>
   );

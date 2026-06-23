@@ -101,10 +101,15 @@ run); Coordinator **önceki turları hatırlar**; canlı işbirliği akışı + 
   (input + final_output) `history` olarak Coordinator runner'ına verir.
 - **Endpoint'ler:** `GET /teams/{id}/conversations` (sohbet listesi),
   `GET /teams/{id}/conversations/{conv}` (turlar).
-- **UI:** `/teams/{id}/chat` — mesaj yaz → Enter; her tur: kullanıcı balonu +
-  **katlanabilir canlı işbirliği** (delege→tool→sonuç, C'deki akış) + **markdown
-  final yanıt**. Geçmiş sohbetler seçici ile yüklenir; "Yeni" ile sıfırdan başlar.
-  Ekip detayında **Sohbet** butonu.
+- **UI:** `/teams/{id}/chat` — **tek-agent sohbetiyle birebir aynı düzen**: solda
+  **geçmiş sohbetler kenar çubuğu** (yeni sohbet + sil + relatif zaman), sağda
+  **chat-bubble**'lı akış (kullanıcı sağda, ekip solda). Her tur: kullanıcı balonu +
+  **katlanabilir canlı işbirliği** (delege→tool→sonuç; final gelince otomatik kapanır) +
+  **markdown final yanıt** balonu. Çok-turlu (Coordinator önceki turları hatırlar).
+  Silme: `DELETE /teams/{id}/conversations/{conv}`.
+- **Markdown her yerde:** ekip çıktıları (final, paylaşılan pano, delege/sonuç içerikleri)
+  hem sohbet hem `team-runs/{id}` sayfasında `Markdown` ile güzelleştirilir (tablo, başlık,
+  liste). Ham tool I/O düz metin kalır.
 
 ### Entegrasyon (C)
 | | Dosya |

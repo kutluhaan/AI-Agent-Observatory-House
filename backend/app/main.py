@@ -189,6 +189,9 @@ app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 from app.api.v1.mcp_servers import router as mcp_servers_router
 app.include_router(mcp_servers_router, prefix="/mcp-servers", tags=["mcp"])
 
+from app.api.v1.mcp_registry import router as mcp_registry_router
+app.include_router(mcp_registry_router, prefix="/mcp-registry", tags=["mcp"])
+
 from app.api.v1.teams import router as teams_router, team_runs_router
 app.include_router(teams_router, prefix="/teams", tags=["teams"])
 app.include_router(team_runs_router, prefix="/team-runs", tags=["teams"])

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plug, Plus, Trash2, Search } from "lucide-react";
-import { api, ApiError, type McpServer, type McpToolInfo } from "@/lib/api";
+import { Plug, Plus, Trash2, Search, Globe, ExternalLink, Lock } from "lucide-react";
+import { api, ApiError, type McpServer, type McpToolInfo, type McpRegistryEntry } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { Modal } from "@/components/ui/modal";
 
 export default function McpServersPage() {
   const [servers, setServers] = useState<McpServer[]>([]);
@@ -18,6 +19,7 @@ export default function McpServersPage() {
   const [url, setUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [adding, setAdding] = useState(false);
+  const [registryOpen, setRegistryOpen] = useState(false);
 
   function load() {
     api.get<McpServer[]>("/mcp-servers").then(setServers).catch(() => setError("Yüklenemedi.")).finally(() => setLoading(false));
@@ -53,6 +55,9 @@ export default function McpServersPage() {
       <div className="mb-6 flex items-center gap-2">
         <Plug size={18} className="text-indigo-400" />
         <h1 className="text-xl font-semibold text-zinc-100">MCP Sunucuları</h1>
+        <Button size="sm" variant="outline" className="ml-auto" onClick={() => setRegistryOpen(true)}>
+          <Globe size={13} />Registry&apos;den keşfet
+        </Button>
       </div>
       <p className="mb-6 text-sm text-zinc-500">
         Dış <span className="text-zinc-300">Model Context Protocol</span> (Streamable HTTP) sunucularını
@@ -91,6 +96,151 @@ export default function McpServersPage() {
           ))}
         </div>
       )}
+
+      <RegistryModal open={registryOpen} onClose={() => setRegistryOpen(false)} onAdded={load} />
+    </div>
+  );
+}
+
+// ── Resmi MCP Registry keşfi (D/#2) ─────────────────────────
+
+function deriveName(regName: string): string {
+  const seg = regName.split("/").pop() ?? regName;
+  return seg.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 60);
+}
+
+function RegistryModal({ open, onClose, onAdded }: { open: boolean; onClose: () => void; onAdded: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<McpRegistryEntry[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState("");
+  const [addedNames, setAddedNames] = useState<Set<string>>(new Set());
+
+  async function search() {
+    setSearching(true);
+    setError("");
+    try {
+      const r = await api.get<McpRegistryEntry[]>(`/mcp-registry/search?q=${encodeURIComponent(query)}&limit=25`);
+      setResults(r);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Registry'e ulaşılamadı.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  // İlk açılışta popüler sunucuları getir
+  useEffect(() => {
+    if (open && results.length === 0) void search();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <Modal open title="MCP Registry — sunucu keşfet" onClose={onClose} className="max-w-xl">
+      <div className="flex flex-col gap-3">
+        <p className="text-xs text-zinc-500">
+          Resmi <span className="text-zinc-300">MCP Registry</span>&apos;de ara, Streamable HTTP destekli bir
+          sunucuyu tek tıkla org&apos;una ekle.
+        </p>
+        <form onSubmit={(e) => { e.preventDefault(); void search(); }} className="flex items-end gap-2">
+          <div className="flex-1">
+            <Input label="Ara" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="github, notion, filesystem…" />
+          </div>
+          <Button size="sm" type="submit" loading={searching}><Search size={13} />Ara</Button>
+        </form>
+
+        {error && <Alert variant="error">{error}</Alert>}
+
+        <div className="max-h-[50vh] overflow-y-auto pr-1">
+          {searching && results.length === 0 ? (
+            <div className="flex justify-center py-10"><Spinner className="h-5 w-5" /></div>
+          ) : results.length === 0 ? (
+            <p className="py-8 text-center text-xs text-zinc-600">Sonuç yok.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {results.map((r) => (
+                <RegistryRow
+                  key={r.name}
+                  entry={r}
+                  added={addedNames.has(r.name)}
+                  onAdd={() => setAddedNames((prev) => new Set(prev).add(r.name))}
+                  onAdded={onAdded}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RegistryRow({ entry, added, onAdd, onAdded }: {
+  entry: McpRegistryEntry;
+  added: boolean;
+  onAdd: () => void;
+  onAdded: () => void;
+}) {
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function add() {
+    if (!entry.remote_url) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await api.post("/mcp-servers", { name: deriveName(entry.name), url: entry.remote_url, api_key: key || null });
+      onAdd();
+      onAdded();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Eklenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 p-3">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-medium text-zinc-200">{deriveName(entry.name)}</span>
+            {entry.version && <span className="shrink-0 text-[10px] text-zinc-600">v{entry.version}</span>}
+            {entry.requires_auth && <Lock size={10} className="shrink-0 text-amber-400" />}
+          </div>
+          {entry.description && <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">{entry.description}</p>}
+          <div className="mt-1 flex items-center gap-2 text-[10px] text-zinc-600">
+            <span className="truncate font-mono">{entry.name}</span>
+            {entry.repository_url && (
+              <a href={entry.repository_url} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-0.5 hover:text-indigo-400">
+                <ExternalLink size={9} />repo
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0">
+          {!entry.addable ? (
+            <span className="text-[10px] text-zinc-600">HTTP remote yok</span>
+          ) : added ? (
+            <span className="text-[10px] text-green-400">✓ eklendi</span>
+          ) : (
+            <Button size="sm" variant="outline" onClick={add} loading={busy}><Plus size={12} />Ekle</Button>
+          )}
+        </div>
+      </div>
+      {entry.addable && !added && entry.requires_auth && (
+        <Input
+          className="mt-2"
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="API anahtarı (bu sunucu istiyor) — opsiyonel, sonra da eklenebilir"
+        />
+      )}
+      {err && <p className="mt-1.5 text-[11px] text-red-400">{err}</p>}
     </div>
   );
 }
