@@ -31,6 +31,16 @@ class CreateTestSuiteRequest(BaseModel):
     _check_kpis = field_validator("kpis")(_validate_kpis)
 
 
+class CreateSuiteFromDatasetRequest(BaseModel):
+    """B2: CSV/JSONL dataset'ten suite oluştur."""
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    description: str | None = None
+    agent_id: uuid.UUID
+    format: str  # csv | jsonl
+    content: Annotated[str, Field(min_length=1)]
+    assertion: str = "contains"  # contains | equals | regex
+
+
 class UpdateTestSuiteRequest(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=200)] | None = None
     description: str | None = None

@@ -430,6 +430,64 @@ async def test_create_scenario_invalid_step_returns_422(owner_client):
     assert resp.status_code == 422
 
 
+# ─── B2: dataset'ten suite ────────────────────────────────
+
+async def _make_agent(client) -> str:
+    r = await client.post("/agents", json={
+        "name": f"ds-agent-{uuid.uuid4().hex[:6]}", "system_prompt": "x",
+        "provider": "openai", "model": "gpt-4o-mini",
+    })
+    return assert_success(r.json())["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_suite_from_csv_dataset(owner_client):
+    client, _, _ = owner_client
+    aid = await _make_agent(client)
+    resp = await client.post("/test-suites/from-dataset", json={
+        "name": f"ds-{uuid.uuid4().hex[:6]}", "agent_id": aid,
+        "format": "csv", "content": "input,expected\nMerhaba,selam\n2+2,4\n", "assertion": "contains",
+    })
+    assert resp.status_code == 201
+    data = assert_success(resp.json())
+    assert data["cases_created"] == 2
+
+
+@pytest.mark.asyncio
+async def test_create_suite_from_jsonl_dataset(owner_client):
+    client, _, _ = owner_client
+    aid = await _make_agent(client)
+    resp = await client.post("/test-suites/from-dataset", json={
+        "name": f"ds-{uuid.uuid4().hex[:6]}", "agent_id": aid,
+        "format": "jsonl", "content": '{"input":"a","expected":"b"}\n{"input":"c"}\n',
+    })
+    assert resp.status_code == 201
+    assert assert_success(resp.json())["cases_created"] == 2
+
+
+@pytest.mark.asyncio
+async def test_from_dataset_invalid_returns_422(owner_client):
+    client, _, _ = owner_client
+    aid = await _make_agent(client)
+    resp = await client.post("/test-suites/from-dataset", json={
+        "name": f"ds-{uuid.uuid4().hex[:6]}", "agent_id": aid,
+        "format": "csv", "content": "foo,bar\n1,2\n",  # input sütunu yok
+    })
+    assert resp.status_code == 422
+    assert_error(resp.json(), "INVALID_DATASET")
+
+
+@pytest.mark.asyncio
+async def test_from_dataset_agent_not_found_422(owner_client):
+    client, _, _ = owner_client
+    resp = await client.post("/test-suites/from-dataset", json={
+        "name": f"ds-{uuid.uuid4().hex[:6]}", "agent_id": str(uuid.uuid4()),
+        "format": "jsonl", "content": '{"input":"a"}\n',
+    })
+    assert resp.status_code == 422
+    assert_error(resp.json(), "AGENT_NOT_FOUND")
+
+
 @pytest.mark.asyncio
 async def test_other_org_cannot_access_run(owner_client, other_client):
     owner, _, _ = owner_client

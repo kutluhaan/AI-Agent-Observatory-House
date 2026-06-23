@@ -27,6 +27,7 @@ from app.core.redis import get_redis
 from app.core.responses import AppError, NotFoundError, success
 from app.models.test_suite import TestCase, TestCaseResult, TestRun, TestSuite
 from app.schemas.test_suites import (
+    CreateSuiteFromDatasetRequest,
     CreateTestSuiteRequest,
     ExperimentResponse,
     ExperimentVariantResult,
@@ -39,6 +40,7 @@ from app.schemas.test_suites import (
     UpdateTestSuiteRequest,
 )
 from app.services.test_suite.experiment_runner import ExperimentRunner
+from app.services.test_suite.dataset import DatasetError, build_suite_yaml, parse_dataset
 from app.services.test_suite.kpi_catalog import DEFAULT_KPIS, KPI_CATALOG
 from app.services.test_suite.parser import ParseError, parse_yaml
 from app.ws.traces import manager as ws_manager
@@ -145,6 +147,55 @@ async def create_test_suite(
     await db.commit()
     await db.refresh(suite)
     return success(TestSuiteResponse.from_orm(suite).model_dump())
+
+
+@router.post("/from-dataset", status_code=201)
+async def create_suite_from_dataset(
+    body: CreateSuiteFromDatasetRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("admin")),
+):
+    """B2: CSV/JSONL dataset'ten suite oluştur (her satır = bir case)."""
+    from app.models.agent import Agent
+
+    agent = (await db.execute(
+        select(Agent).where(Agent.id == body.agent_id, Agent.organization_id == ctx.org_id)
+    )).scalar_one_or_none()
+    if agent is None:
+        raise AppError("AGENT_NOT_FOUND", "Agent not found in this organization.", 422)
+
+    try:
+        rows = parse_dataset(body.content, body.format)
+    except DatasetError as exc:
+        raise AppError("INVALID_DATASET", str(exc), 422)
+
+    config_yaml = build_suite_yaml(body.name, str(body.agent_id), rows, body.assertion)
+
+    existing = await db.execute(
+        select(TestSuite).where(TestSuite.organization_id == ctx.org_id, TestSuite.name == body.name)
+    )
+    if existing.scalar_one_or_none():
+        raise AppError("SUITE_NAME_CONFLICT", f"A suite named '{body.name}' already exists.", 409)
+
+    parsed = parse_yaml(config_yaml)
+    suite = TestSuite(
+        id=uuid.uuid4(), organization_id=ctx.org_id, created_by=ctx.user_id,
+        name=body.name, description=body.description, config_yaml=config_yaml,
+    )
+    db.add(suite)
+    await db.flush()
+    for pc in parsed.cases:
+        db.add(TestCase(
+            id=uuid.uuid4(), suite_id=suite.id, agent_id=pc.agent_id or parsed.agent_id,
+            name=pc.name, input=pc.input,
+            assertions=[{"type": a.type, "value": a.value} for a in pc.assertions],
+            judges=[j.to_dict() for j in pc.judges], repeat=pc.repeat,
+            min_pass_rate=pc.min_pass_rate, expected_output=pc.expected_output,
+            rag_context=pc.rag_context, steps=[s.to_dict() for s in pc.steps] if pc.steps else None,
+        ))
+    await db.commit()
+    await db.refresh(suite)
+    return success({**TestSuiteResponse.from_orm(suite).model_dump(), "cases_created": len(parsed.cases)})
 
 
 @router.get("")

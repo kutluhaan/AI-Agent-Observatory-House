@@ -27,6 +27,7 @@ belgelenir.
 - [Çıktı kalitesi](test-suite/output-quality.md) — bileşik `output_quality` judge'ı (F4.1)
 - [A/B prompt deneyleri](test-suite/ab-prompt-experiments.md) — system prompt varyantlarını yan yana karşılaştır (F4.3)
 - [Senaryo testleri](test-suite/scenario-runs.md) — çok-turlu görev + adım checkpoint'leri (F6)
+- [Dataset'ten suite](test-suite/dataset-suites.md) — CSV/JSONL yükle, otomatik case (B2/#5)
 
 ### Ajan & Araçlar
 - [Tool kategorileri](features/tool-categories.md) — file/web/finance/operation/self; kategori bazlı seçim
