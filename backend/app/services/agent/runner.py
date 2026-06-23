@@ -86,6 +86,7 @@ class AgentRunner(BaseAgent):
         ws_manager: Any | None = None,   # ConnectionManager
         history: list[Message] | None = None,  # Önceki thread mesajları (çok-turlu hafıza)
         mcp_tools: list[dict] | None = None,  # F7.2: çözümlenmiş MCP tool'ları [{name, description, input_schema, url, api_key}]
+        on_tool: Any | None = None,  # C1: her tool çalıştıktan sonra çağrılan async callback(name, args, result)
     ) -> None:
         super().__init__(config)
         self.provider = provider
@@ -94,6 +95,7 @@ class AgentRunner(BaseAgent):
         self.hitl = hitl
         self.ws_manager = ws_manager
         self.history = history or []
+        self.on_tool = on_tool
         # F7.2: MCP tool'ları "mcp__{name}" olarak sunulur (native tool'larla çakışmaz)
         self._mcp_tools = mcp_tools or []
         self._mcp_by_name = {f"mcp__{t['name']}": t for t in self._mcp_tools}
@@ -603,6 +605,16 @@ class AgentRunner(BaseAgent):
         ]
 
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any] | str) -> str:
+        """_execute_tool_inner'ı sarar; sonucu on_tool callback'ine (varsa) iletir (C1)."""
+        result = await self._execute_tool_inner(tool_name, arguments)
+        if self.on_tool is not None:
+            try:
+                await self.on_tool(tool_name, arguments, result)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("agent.on_tool_failed", tool=tool_name, error=str(exc))
+        return result
+
+    async def _execute_tool_inner(self, tool_name: str, arguments: dict[str, Any] | str) -> str:
         """Tool handler'ı çalıştırır, hataları AgentToolError'a çevirir.
 
         arguments: OpenAI JSON string döndürür, Anthropic dict döndürür — her ikisini normalize eder.

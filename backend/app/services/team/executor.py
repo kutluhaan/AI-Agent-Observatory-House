@@ -26,6 +26,18 @@ from app.services.trace_collector import Tracer
 # Coordinator delege edebilir; herkes panoyu kullanır
 _COORDINATOR_TOOLS = ["delegate", "team_share", "team_board"]
 _MEMBER_TOOLS = ["team_share", "team_board"]
+# Bunlar zaten delege/sonuç/pano mesajı olarak kaydedilir → "tool" mesajı olarak tekrar yazma
+_TEAM_TOOLS = {"delegate", "team_share", "team_board"}
+
+
+def make_tool_recorder(db: AsyncSession, team_run_id: uuid.UUID, role: str, org_id: uuid.UUID | None = None):
+    """C1: bir üyenin tool çağrılarını timeline'a 'tool' mesajı olarak kaydeden callback üretir."""
+    async def on_tool(name: str, args, result: str) -> None:
+        if name in _TEAM_TOOLS:
+            return
+        brief = result if len(result) <= 400 else result[:400] + "…"
+        await record_message(db, team_run_id, "tool", brief, from_role=role, title=name, org_id=org_id)
+    return on_tool
 
 
 async def record_message(
@@ -37,6 +49,7 @@ async def record_message(
     from_role: str | None = None,
     to_role: str | None = None,
     title: str | None = None,
+    org_id: uuid.UUID | None = None,
 ) -> None:
     db.add(TeamRunMessage(
         id=uuid.uuid4(),
@@ -48,6 +61,13 @@ async def record_message(
         content=content or "",
     ))
     await db.commit()
+    # C2: org kanalına "değişti, yenile" ping'i (frontend ilgili run'ı yeniden çeker)
+    if org_id is not None:
+        try:
+            from app.ws.traces import manager
+            await manager.broadcast(str(org_id), {"type": "team_run_updated", "run_id": str(team_run_id)})
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def build_roster_text(members: list[TeamMember], me_role: str | None) -> str:
@@ -71,6 +91,7 @@ async def build_member_runner(
     team_id: uuid.UUID,
     team_run_id: uuid.UUID,
     parent_trace_id: str | None = None,
+    on_tool=None,
 ) -> AgentRunner:
     """Bir ekip üyesi için rol promptu + kadro + ekip tool'larıyla AgentRunner kurar."""
     agent = (await db.execute(
@@ -139,4 +160,5 @@ async def build_member_runner(
         tracer=tracer,
         tool_context=tool_context,
         mcp_tools=mcp_tools,
+        on_tool=on_tool if on_tool is not None else make_tool_recorder(db, team_run_id, member.role, org_id),
     )

@@ -14,8 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantContext, require_role
 from app.core.database import get_db
 from app.core.responses import success
+from sqlalchemy.orm import selectinload
+
 from app.models.agent import Agent
+from app.models.team import Team, TeamRun
 from app.models.test_suite import TestCase, TestCaseResult, TestRun, TestSuite
+from app.services.team.team_stats import compute_team_stats
 from app.services.test_suite.org_dashboard import compute_org_dashboard
 
 router = APIRouter()
@@ -61,9 +65,39 @@ async def get_dashboard(
         for aid, rs in groups.items()
     ]
 
-    return success(compute_org_dashboard(
+    overview = compute_org_dashboard(
         agent_count=agent_count,
         suite_count=int(suite_count),
         runs=list(runs),
         agent_groups=agent_groups,
-    ))
+    )
+
+    # C4: ekip lider tablosu — her ekibin run'larından performans
+    teams = (await db.execute(
+        select(Team).where(Team.organization_id == org_id).options(selectinload(Team.members))
+    )).scalars().all()
+    team_runs = (await db.execute(
+        select(TeamRun).where(TeamRun.organization_id == org_id)
+    )).scalars().all()
+    runs_by_team: dict = {}
+    for r in team_runs:
+        runs_by_team.setdefault(r.team_id, []).append(r)
+
+    team_board = []
+    for t in teams:
+        st = compute_team_stats(runs_by_team.get(t.id, []))
+        team_board.append({
+            "team_id": str(t.id),
+            "name": t.name,
+            "members": len(t.members),
+            "total_runs": st["total_runs"],
+            "success_rate": st["success_rate"],
+            "avg_duration_ms": st["avg_duration_ms"],
+        })
+    # En çok çalıştırılan + başarılı önce
+    team_board.sort(key=lambda x: (x["success_rate"] or -1, x["total_runs"]), reverse=True)
+
+    overview["counts"]["teams"] = len(teams)
+    overview["teams_evaluated"] = sum(1 for t in team_board if t["total_runs"] > 0)
+    overview["team_leaderboard"] = team_board
+    return success(overview)

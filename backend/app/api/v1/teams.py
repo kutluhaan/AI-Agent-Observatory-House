@@ -36,6 +36,7 @@ from app.schemas.teams import (
 )
 from app.services.team.roles import DEFAULT_ROLE_PROMPTS, ROLE_LABELS, TEAM_ROLES
 from app.services.team.runner import TeamRunner
+from app.services.team.team_stats import compute_team_stats
 
 router = APIRouter()
 team_runs_router = APIRouter()
@@ -182,6 +183,15 @@ async def list_team_runs(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantCont
         .order_by(TeamRun.created_at.desc()).limit(50)
     )).scalars().all()
     return success([TeamRunResponse.from_orm(r).model_dump() for r in rows])
+
+
+@router.get("/{team_id}/stats")
+async def get_team_stats(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    runs = (await db.execute(
+        select(TeamRun).where(TeamRun.team_id == team_id, TeamRun.organization_id == ctx.org_id)
+    )).scalars().all()
+    return success(compute_team_stats(list(runs)))
 
 
 @team_runs_router.get("/{run_id}")

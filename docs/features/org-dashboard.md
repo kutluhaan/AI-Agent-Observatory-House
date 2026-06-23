@@ -22,8 +22,11 @@ GET /dashboard        (member rolü)
 
 - **Lider tablosu:** her agent'ın case sonuçları `compute_agent_stats` ile özetlenir,
   `pass_rate` (sonra judge skoru) ile sıralanır. Veri olmayan agent atlanır.
-- **UI:** ana dashboard'da sayımlar + birleşik KPI'lar + ilk 8 agent sıralaması
-  (satıra tıkla → agent performans paneli). Üst nav'da **Dashboard** sekmesi.
+- **UI (C4 ile güncellendi):** "bir org, agent ve ekipleri kadar iyidir" →
+  dashboard **agent + ekip odaklı**. Org metrikleri tek **kompakt şeride** indi;
+  altında **Agent sıralaması** + **Ekip sıralaması** yan yana (satıra tıkla →
+  agent performans paneli / ekip detayı). Yanıt `team_leaderboard` + `counts.teams`
+  + `teams_evaluated` içerir (her ekip için `compute_team_stats`).
 
 ## F5.3 — Bilgi-etkisi (RAG metrik trendi)
 

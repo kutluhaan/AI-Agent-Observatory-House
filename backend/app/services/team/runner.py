@@ -22,6 +22,15 @@ from app.services.team.roles import COORDINATOR
 logger = structlog.get_logger()
 
 
+async def _broadcast_status(org_id, run_id) -> None:
+    """C2: org kanalına 'değişti' ping'i (frontend run'ı yeniden çeker)."""
+    try:
+        from app.ws.traces import manager
+        await manager.broadcast(str(org_id), {"type": "team_run_updated", "run_id": str(run_id)})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class TeamRunner:
     def __init__(self, run_id: uuid.UUID, db_factory: Any, redis: Any) -> None:
         self.run_id = run_id
@@ -50,6 +59,7 @@ class TeamRunner:
             run.status = "running"
             run.started_at = datetime.now(UTC)
             await db.commit()
+            await _broadcast_status(run.organization_id, run.id)
 
             if coordinator is None:
                 run.status = "failed"
@@ -64,7 +74,7 @@ class TeamRunner:
                     org_id=run.organization_id, team_id=run.team_id, team_run_id=run.id,
                 )
                 result = await runner.run(run.input)
-                await record_message(db, run.id, "final", result.content, from_role=COORDINATOR)
+                await record_message(db, run.id, "final", result.content, from_role=COORDINATOR, org_id=run.organization_id)
                 run.final_output = result.content
                 run.status = "completed"
             except Exception as exc:  # noqa: BLE001
@@ -73,4 +83,5 @@ class TeamRunner:
                 run.error_message = str(exc)
             run.ended_at = datetime.now(UTC)
             await db.commit()
+            await _broadcast_status(run.organization_id, run.id)
             logger.info("team_runner.done", run_id=str(run.id), status=run.status)

@@ -174,7 +174,7 @@ export default function AgentKnowledgePage() {
 
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Bilgi</h1>
+          <h1 className="text-xl font-semibold text-zinc-100">Knowledge Base</h1>
           <p className="mt-1 text-sm text-zinc-500">
             {agent?.name ?? "…"} — kural, anayasa, talimat, prompt ve skill&apos;ler
           </p>
@@ -311,7 +311,7 @@ export default function AgentKnowledgePage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={editingId ? "Bilgi öğesini düzenle" : "Bilgi öğesi ekle"}
+        title={editingId ? "Knowledge Base öğesini düzenle" : "Knowledge Base öğesi ekle"}
         className="max-w-lg"
       >
         <div className="flex flex-col gap-4">

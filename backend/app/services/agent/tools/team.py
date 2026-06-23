@@ -51,7 +51,7 @@ def register_team_tools() -> None:
             avail = ", ".join(sorted({m.role for m in members if m.role != COORDINATOR}))
             return f"[delegate error: no teammate with role '{role}'. Available roles: {avail}]"
 
-        await record_message(ctx.db, ctx.team_run_id, "delegate", task, from_role=ctx.current_role, to_role=role)
+        await record_message(ctx.db, ctx.team_run_id, "delegate", task, from_role=ctx.current_role, to_role=role, org_id=ctx.org_id)
         try:
             runner = await build_member_runner(
                 ctx.db, ctx.redis, target, members,
@@ -62,7 +62,7 @@ def register_team_tools() -> None:
             output = result.content
         except Exception as exc:  # noqa: BLE001
             output = f"[teammate '{role}' failed: {exc}]"
-        await record_message(ctx.db, ctx.team_run_id, "result", output, from_role=role, to_role=ctx.current_role)
+        await record_message(ctx.db, ctx.team_run_id, "result", output, from_role=role, to_role=ctx.current_role, org_id=ctx.org_id)
         return output
 
     @ToolRegistry.register(
@@ -81,7 +81,7 @@ def register_team_tools() -> None:
         from app.services.team.executor import record_message
         if ctx.team_run_id is None:
             return "[team_share error: not in a team context]"
-        await record_message(ctx.db, ctx.team_run_id, "board", content, from_role=ctx.current_role, title=title)
+        await record_message(ctx.db, ctx.team_run_id, "board", content, from_role=ctx.current_role, title=title, org_id=ctx.org_id)
         return f"Shared to team board: {title}"
 
     @ToolRegistry.register(

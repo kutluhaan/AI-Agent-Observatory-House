@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, StickyNote, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, StickyNote, CheckCircle2, ChevronDown, Wrench } from "lucide-react";
 import { api, type TeamRunDetail, type TeamRunMessage } from "@/lib/api";
+import { roleIcon, roleColor } from "@/lib/team-roles";
+import { subscribeTeamRuns } from "@/lib/ws";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { Markdown } from "@/components/ui/markdown";
+import { cn } from "@/lib/utils";
 
 export default function TeamRunDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,10 +24,18 @@ export default function TeamRunDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // çalışırken poll
+  // C2: canlı — WS ping geldiğinde bu run'ı yeniden çek
+  useEffect(() => {
+    const unsub = subscribeTeamRuns((ev) => {
+      if (ev.run_id === id) load();
+    });
+    return unsub;
+  }, [id, load]);
+
+  // WS düşerse yedek: çalışırken yavaş poll
   useEffect(() => {
     if (!data || (data.run.status !== "running" && data.run.status !== "pending")) return;
-    const t = setInterval(load, 2500);
+    const t = setInterval(load, 4000);
     return () => clearInterval(t);
   }, [data, load]);
 
@@ -57,10 +69,12 @@ export default function TeamRunDetailPage() {
       {/* Final output */}
       {run.final_output && (
         <div className="mb-6 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
-          <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-green-400">
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-green-400">
             <CheckCircle2 size={12} />Final çıktı
           </p>
-          <p className="whitespace-pre-wrap text-sm text-zinc-200">{run.final_output}</p>
+          <div className="text-sm text-zinc-200">
+            <Markdown>{run.final_output}</Markdown>
+          </div>
         </div>
       )}
 
@@ -98,18 +112,61 @@ export default function TeamRunDetailPage() {
 }
 
 function MessageRow({ m }: { m: TeamRunMessage }) {
-  if (m.kind === "board") return null; // panoda gösterildi
+  const [open, setOpen] = useState(false);
+  // board üstte ayrı gösterildi; final, sayfa başında "Final çıktı" kutusunda
+  if (m.kind === "board" || m.kind === "final") return null;
+
+  // C1/C2: üye tool çağrısı — delegasyonun altına girintili, minimal
+  if (m.kind === "tool") {
+    const RI = m.from_role ? roleIcon(m.from_role) : Wrench;
+    return (
+      <div className="ml-6 rounded-lg border border-zinc-800/50 bg-zinc-950/30">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition-colors hover:bg-zinc-900/40"
+        >
+          <RI size={11} className={m.from_role ? roleColor(m.from_role) : "text-amber-400"} />
+          <Wrench size={10} className="text-amber-400" />
+          <span className="shrink-0 text-[11px] font-medium text-zinc-400">{m.title}</span>
+          {!open && <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-600">· {m.content}</span>}
+          <ChevronDown size={11} className={cn("ml-auto shrink-0 text-zinc-700 transition-transform", open && "rotate-180")} />
+        </button>
+        {open && (
+          <p className="max-h-56 overflow-y-auto whitespace-pre-wrap border-t border-zinc-800/50 px-3 py-1.5 text-[11px] text-zinc-400">
+            {m.content}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   const isDelegate = m.kind === "delegate";
-  const isResult = m.kind === "result";
-  const isFinal = m.kind === "final";
+  const FromI = m.from_role ? roleIcon(m.from_role) : null;
+  const ToI = m.to_role ? roleIcon(m.to_role) : null;
   return (
-    <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
-      <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-        {isDelegate && <><Badge variant="indigo">{m.from_role}</Badge><ArrowRight size={11} /><Badge variant="zinc">{m.to_role}</Badge><span className="text-zinc-600">delege</span></>}
-        {isResult && <><Badge variant="zinc">{m.from_role}</Badge><ArrowRight size={11} /><Badge variant="indigo">{m.to_role}</Badge><span className="text-zinc-600">sonuç</span></>}
-        {isFinal && <><CheckCircle2 size={11} className="text-green-400" /><span className="text-green-400">final</span></>}
-      </p>
-      <p className="mt-1.5 whitespace-pre-wrap text-xs text-zinc-300">{m.content}</p>
+    <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-900/50"
+      >
+        <span className="flex shrink-0 items-center gap-1 text-[11px]">
+          {FromI && <FromI size={12} className={roleColor(m.from_role!)} />}
+          <span className="text-zinc-300">{m.from_role}</span>
+          <ArrowRight size={10} className="text-zinc-600" />
+          {ToI && <ToI size={12} className={roleColor(m.to_role!)} />}
+          <span className="text-zinc-300">{m.to_role}</span>
+          <span className="text-zinc-600">· {isDelegate ? "delege" : "sonuç"}</span>
+        </span>
+        {!open && <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-600">{m.content}</span>}
+        <ChevronDown size={12} className={cn("ml-auto shrink-0 text-zinc-600 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <p className="max-h-72 overflow-y-auto whitespace-pre-wrap border-t border-zinc-800/60 px-3 py-2 text-xs text-zinc-300">
+          {m.content}
+        </p>
+      )}
     </div>
   );
 }

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, ChevronRight, Crown } from "lucide-react";
-import { api, ApiError, type Team, type TeamRun } from "@/lib/api";
+import { ArrowLeft, Play, ChevronRight } from "lucide-react";
+import { api, ApiError, type Team, type TeamRun, type TeamStats } from "@/lib/api";
+import { roleIcon, roleColor } from "@/lib/team-roles";
 import { Button } from "@/components/ui/button";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
@@ -20,9 +21,11 @@ export default function TeamDetailPage() {
   const [error, setError] = useState("");
   const [input, setInput] = useState("");
   const [starting, setStarting] = useState(false);
+  const [stats, setStats] = useState<TeamStats | null>(null);
 
   const loadRuns = useCallback(() => {
     api.get<TeamRun[]>(`/teams/${id}/runs`).then(setRuns).catch(() => {});
+    api.get<TeamStats>(`/teams/${id}/stats`).then(setStats).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -59,13 +62,16 @@ export default function TeamDetailPage() {
       {/* Üyeler */}
       <h2 className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-zinc-500">Üyeler</h2>
       <div className="mb-6 overflow-hidden rounded-xl border border-zinc-800/80">
-        {team?.members.map((m, i) => (
-          <div key={m.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-zinc-800/60" : "")}>
-            {m.role === "coordinator" ? <Crown size={14} className="text-amber-400" /> : <span className="w-3.5" />}
-            <Badge variant={m.role === "coordinator" ? "indigo" : "zinc"}>{m.role}</Badge>
-            <span className="flex-1 text-sm text-zinc-300">{m.agent_name ?? "—"}</span>
-          </div>
-        ))}
+        {team?.members.map((m, i) => {
+          const RI = roleIcon(m.role);
+          return (
+            <div key={m.id} className={"flex items-center gap-3 px-4 py-3 " + (i > 0 ? "border-t border-zinc-800/60" : "")}>
+              <RI size={15} className={roleColor(m.role)} />
+              <Badge variant={m.role === "coordinator" ? "indigo" : "zinc"}>{m.role}</Badge>
+              <span className="flex-1 text-sm text-zinc-300">{m.agent_name ?? "—"}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Çalıştır */}
@@ -76,6 +82,21 @@ export default function TeamDetailPage() {
           <Button size="sm" onClick={run} loading={starting} disabled={!input.trim()}><Play size={13} />Ekibi çalıştır</Button>
         </div>
       </div>
+
+      {/* Performans (C3) */}
+      {stats && stats.total_runs > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-zinc-800/60 bg-zinc-900/30 px-4 py-3">
+          <span className="flex items-baseline gap-1.5">
+            <span className={"text-sm font-semibold " + (stats.success_rate != null && stats.success_rate >= 0.99 ? "text-green-400" : stats.success_rate != null && stats.success_rate >= 0.6 ? "text-amber-400" : "text-zinc-100")}>
+              {stats.success_rate == null ? "—" : `${Math.round(stats.success_rate * 100)}%`}
+            </span>
+            <span className="text-[11px] text-zinc-600">başarı</span>
+          </span>
+          <span className="flex items-baseline gap-1.5"><span className="text-sm font-semibold text-zinc-100">{stats.total_runs}</span><span className="text-[11px] text-zinc-600">çalıştırma</span></span>
+          <span className="flex items-baseline gap-1.5"><span className="text-sm font-semibold text-zinc-100">{stats.completed_runs}/{stats.failed_runs}</span><span className="text-[11px] text-zinc-600">tamam/hata</span></span>
+          <span className="flex items-baseline gap-1.5"><span className="text-sm font-semibold text-zinc-100">{stats.avg_duration_ms == null ? "—" : (stats.avg_duration_ms / 1000).toFixed(1) + "s"}</span><span className="text-[11px] text-zinc-600">ort. süre</span></span>
+        </div>
+      )}
 
       {/* Çalıştırmalar */}
       <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Çalıştırmalar</h2>

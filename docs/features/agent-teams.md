@@ -36,11 +36,34 @@ POST   /teams {name, members:[{agent_id, role, role_prompt}]}   (admin; tam 1 co
 GET    /teams · GET /teams/{id} · PATCH · DELETE
 POST   /teams/{id}/run {input}       → 202; arka planda TeamRunner çalışır
 GET    /teams/{id}/runs              → çalıştırma listesi
-GET    /team-runs/{id}               → run + mesaj timeline'ı (delegasyon + pano + final)
+GET    /teams/{id}/stats             → ekip performansı (success_rate, avg_duration, trend) [C3]
+GET    /team-runs/{id}               → run + mesaj timeline'ı (delegasyon + tool + pano + final)
 ```
 
 `TeamRunner` Coordinator'ı görevle çalıştırır; o delege eder, panoyu kullanır,
 final çıktıyı üretir → `team_runs.final_output` + `kind=final` mesajı.
+
+## İzlenebilirlik (C kümesi)
+
+Ekibin nasıl çalıştığını **canlı ve minimal** izlersin:
+- **Üye tool çağrıları** timeline'a işlenir (`kind="tool"`): `AgentRunner.on_tool`
+  hook'u her tool sonrası tetiklenir; `make_tool_recorder` bunu `team_run_messages`'a
+  yazar (team tool'ları hariç). UI'da delegasyonun altına **girintili, katlanabilir**
+  (rol ikonu + 🔧 tool adı + minimal çıktı).
+- **Canlı (WebSocket):** yeni mesaj/durum oldukça `WS /ws/team-runs` org kanalına
+  `{type:"team_run_updated", run_id}` ping'i yayınlar; istemci ilgili run'ı yeniden
+  çeker (yedek: 4sn poll). `record_message(..., org_id=)` + TeamRunner durum yayını.
+- **Final çıktı** markdown olarak güzelleştirilmiş.
+- Akış: **kim→kim delege (neden=görev) → o üyenin tool çağrıları (minimal) → sonuç →
+  … → final (markdown)**.
+
+### Entegrasyon (C)
+| | Dosya |
+|---|---|
+| Tool hook | `app/services/agent/runner.py` (`on_tool`), `team/executor.py` (`make_tool_recorder`, `record_message` org_id+broadcast) |
+| WS | `app/ws/team_runs.py` (`/ws/team-runs`) + `frontend/src/lib/ws.ts` (`subscribeTeamRuns`) |
+| Stats | `app/services/team/team_stats.py` + `GET /teams/{id}/stats` + dashboard ekip lider tablosu |
+| UI | `team-runs/[id]` (tool mesajı + markdown final + WS), `teams/[id]` (stats şeridi), `dashboard` (agent+ekip lider) |
 
 ## Güvenlik / sınırlar
 

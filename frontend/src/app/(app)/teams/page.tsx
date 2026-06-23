@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Users, Plus, Trash2 } from "lucide-react";
 import { api, ApiError, type Team } from "@/lib/api";
+import { roleIcon } from "@/lib/team-roles";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
@@ -76,9 +77,15 @@ export default function TeamsPage() {
                 {t.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{t.description}</p>}
               </div>
               <div className="flex flex-wrap gap-1 border-t border-zinc-800/60 pt-3">
-                {t.members.map((m) => (
-                  <Badge key={m.id} variant={m.role === "coordinator" ? "indigo" : "zinc"}>{m.role}</Badge>
-                ))}
+                {t.members.map((m) => {
+                  const RI = roleIcon(m.role);
+                  return (
+                    <Badge key={m.id} variant={m.role === "coordinator" ? "indigo" : "zinc"}>
+                      <RI size={10} />
+                      {m.role}
+                    </Badge>
+                  );
+                })}
               </div>
             </div>
           ))}

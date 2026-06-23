@@ -139,15 +139,31 @@ export default function TestSuiteDetailPage() {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-500">
-            <input
-              type="checkbox"
-              checked={parallel}
-              onChange={(e) => setParallel(e.target.checked)}
-              className="accent-indigo-500"
-            />
-            Parallel
-          </label>
+          <div
+            className="inline-flex items-center rounded-lg border border-zinc-800 bg-zinc-950/50 p-0.5 text-xs"
+            title="Case'ler sırayla mı yoksa aynı anda mı çalışsın"
+          >
+            <button
+              type="button"
+              onClick={() => setParallel(false)}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium transition-colors",
+                !parallel ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              Sıralı
+            </button>
+            <button
+              type="button"
+              onClick={() => setParallel(true)}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium transition-colors",
+                parallel ? "bg-indigo-500/20 text-indigo-200" : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              Paralel
+            </button>
+          </div>
           <Button
             size="sm"
             variant="outline"

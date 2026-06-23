@@ -35,12 +35,19 @@ async def test_list_connections_empty(owner_client):
 
 
 @pytest.mark.asyncio
-async def test_authorize_requires_google_config(owner_client):
-    """GOOGLE_CLIENT_ID .env'de boşken authorize → 400 GOOGLE_NOT_CONFIGURED."""
+async def test_authorize_behaviour_matches_config(owner_client):
+    """Google yapılandırılmışsa authorize URL döner; değilse 400 GOOGLE_NOT_CONFIGURED.
+    (Env'e bağlı; iki durumu da doğru kabul eder.)"""
+    from app.services.connections.google_oauth import is_configured
     client, _, _ = owner_client
     resp = await client.post("/connections/google/authorize", json={})
-    assert resp.status_code == 400
-    assert_error(resp.json(), "GOOGLE_NOT_CONFIGURED")
+    if is_configured():
+        assert resp.status_code == 200
+        data = assert_success(resp.json())
+        assert data["authorize_url"].startswith("https://accounts.google.com/")
+    else:
+        assert resp.status_code == 400
+        assert_error(resp.json(), "GOOGLE_NOT_CONFIGURED")
 
 
 @pytest.mark.asyncio

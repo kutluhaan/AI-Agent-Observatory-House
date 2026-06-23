@@ -443,7 +443,7 @@ export default function ChatPage() {
                 className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
               >
                 <BookOpen size={12} />
-                Bilgi
+                Knowledge Base
               </Link>
             )}
             {agent?.file_system_enabled && (
@@ -593,26 +593,45 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
 }
 
 function ToolCard({ tool }: { tool: ToolBlock }) {
+  const [open, setOpen] = useState(false);
   const rows = formatArgs(tool.args);
+  // Tek satır özet: ilk argüman değeri ya da sonuç boyutu
+  const summary = rows[0]?.value ?? (tool.result ? `${tool.result.length} karakter sonuç` : "");
   return (
-    <div className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5 text-xs">
-      <div className="flex items-center gap-2">
-        <Wrench size={12} className="text-amber-400" />
+    <div className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-900/70"
+      >
+        <Wrench size={12} className="shrink-0 text-amber-400" />
         <span className="font-medium text-zinc-300">{toolLabel(tool.name)}</span>
-        {tool.status === "running" ? <Spinner className="h-3 w-3" /> : <Badge variant="green">tamam</Badge>}
-      </div>
-      {rows.length > 0 && (
-        <div className="mt-1.5 flex flex-col gap-0.5">
-          {rows.map((r, i) => (
-            <div key={i} className="flex gap-1.5 text-[11px]">
-              <span className="text-zinc-600">{r.label}:</span>
-              <span className="text-zinc-400">{r.value}</span>
+        {tool.status === "running" ? (
+          <Spinner className="h-3 w-3" />
+        ) : (
+          <Badge variant="green">tamam</Badge>
+        )}
+        {summary && <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-600">· {summary}</span>}
+        {(rows.length > 0 || tool.result) && (
+          <ChevronDown size={12} className={cn("ml-auto shrink-0 text-zinc-600 transition-transform", open && "rotate-180")} />
+        )}
+      </button>
+      {open && (rows.length > 0 || tool.result) && (
+        <div className="border-t border-zinc-800/60 px-3 py-2">
+          {rows.length > 0 && (
+            <div className="mb-1.5 flex flex-col gap-0.5">
+              {rows.map((r, i) => (
+                <div key={i} className="flex gap-1.5 text-[11px]">
+                  <span className="text-zinc-600">{r.label}:</span>
+                  <span className="text-zinc-400">{r.value}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {tool.result && (
+            <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-[11px] text-zinc-400">{tool.result}</p>
+          )}
         </div>
-      )}
-      {tool.result && (
-        <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-[11px] text-zinc-400">{tool.result}</p>
       )}
     </div>
   );
