@@ -11,7 +11,7 @@ import {
   Briefcase,
   ChevronDown,
 } from "lucide-react";
-import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool } from "@/lib/api";
+import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool, type CustomTool } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,6 +58,7 @@ export interface AgentFormValues {
   endpoint_url?: string | null;
   endpoint_api_key?: string | null;
   mcp_tools?: AgentMcpTool[] | null;
+  custom_tool_ids?: string[] | null;
 }
 
 export function AgentForm({
@@ -86,6 +87,9 @@ export function AgentForm({
   const [mcpSelected, setMcpSelected] = useState<Map<string, AgentMcpTool>>(
     new Map((initial?.mcp_tools ?? []).map((t) => [`${t.server_id}:${t.tool_name}`, t])),
   );
+  // B1: org custom tool'ları + seçili id'ler
+  const [customTools, setCustomTools] = useState<CustomTool[]>([]);
+  const [customSelected, setCustomSelected] = useState<Set<string>>(new Set(initial?.custom_tool_ids ?? []));
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -97,8 +101,18 @@ export function AgentForm({
       setOpenCats(new Set(cats.filter((c) => c.tools.some((t) => sel.has(t.name))).map((c) => c.key)));
     }).catch(() => {});
     api.get<McpServer[]>("/mcp-servers").then(setMcpServers).catch(() => {});
+    api.get<CustomTool[]>("/custom-tools").then(setCustomTools).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function toggleCustomTool(id: string) {
+    setCustomSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleCat(key: string) {
     setOpenCats((prev) => {
@@ -179,6 +193,8 @@ export function AgentForm({
         ...(endpointApiKey ? { endpoint_api_key: endpointApiKey } : {}),
         // F7.2: seçili MCP tool'ları
         mcp_tools: mcpSelected.size > 0 ? Array.from(mcpSelected.values()) : null,
+        // B1: seçili custom tool id'leri
+        custom_tool_ids: customSelected.size > 0 ? Array.from(customSelected) : null,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "İşlem başarısız oldu.");
@@ -276,6 +292,37 @@ export function AgentForm({
               onToggle={(tool) => toggleMcpTool(s.id, tool)}
             />
           ))}
+        </div>
+      )}
+
+      {/* B1: org özel HTTP tool'ları */}
+      {customTools.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-zinc-300">
+            Özel araçlar{" "}
+            {customSelected.size > 0 && <span className="text-indigo-400">({customSelected.size} seçili)</span>}
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {customTools.map((t) => (
+              <label
+                key={t.id}
+                className="flex cursor-pointer items-start gap-2 rounded-md border border-zinc-800/70 px-2.5 py-2 text-xs hover:border-zinc-700"
+                title={t.url}
+              >
+                <input
+                  type="checkbox"
+                  checked={customSelected.has(t.id)}
+                  onChange={() => toggleCustomTool(t.id)}
+                  className="mt-0.5 accent-indigo-500"
+                />
+                <span className="min-w-0">
+                  <span className="font-mono text-zinc-200">{t.name}</span>
+                  <span className="ml-1 rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{t.method}</span>
+                  {t.description && <span className="block truncate text-[10px] text-zinc-600">{t.description}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
       )}
 

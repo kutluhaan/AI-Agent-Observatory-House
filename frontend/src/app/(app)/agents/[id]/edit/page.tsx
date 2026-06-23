@@ -58,6 +58,7 @@ export default function EditAgentPage() {
             file_system_enabled: agent.file_system_enabled,
             endpoint_url: agent.endpoint_url,
             mcp_tools: agent.mcp_tools,
+            custom_tool_ids: agent.custom_tool_ids?.map(String) ?? null,
           }}
           submitLabel="Değişiklikleri kaydet"
           onSubmit={handleSave}
