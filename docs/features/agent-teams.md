@@ -57,6 +57,32 @@ Ekibin nasıl çalıştığını **canlı ve minimal** izlersin:
 - Akış: **kim→kim delege (neden=görev) → o üyenin tool çağrıları (minimal) → sonuç →
   … → final (markdown)**.
 
+## Bütçeler, limitler ve ekip promptu (loop kontrolü)
+
+Çok-agent çalıştırmaları sonsuz dönüp token tüketmesin diye **katmanlı koruma**
+(sektör pratiği — [Anthropic multi-agent research](https://www.anthropic.com/engineering/multi-agent-research-system)
++ [agentic loop control](https://datasciencedojo.com/blog/agentic-loops-explained-from-react-to-loop-engineering-2026-guide/)):
+
+| Katman | Nerede | Varsayılan | Ne yapar |
+|--------|--------|-----------|----------|
+| **Iterasyon limiti** | `agent.max_steps` (üye bazında) | 6–10 | ReAct döngüsü / tool-çağrı tavanı |
+| **Üye süre limiti** | `agent.timeout_seconds` | 120 | Tek üyenin wall-clock tavanı |
+| **Çalışma üst süresi** | `team.run_timeout_seconds` | 600 | Coordinator = TÜM orkestrasyonun tavanı |
+| **İletişim bütçesi** | `team.max_delegations` | 12 | Coordinator bir run'da en fazla N delege; aşınca `delegate` "panodan sentezle, dur" döndürür |
+| **Ekip promptu** | `team.shared_instructions` | — | Tüm üyelere eklenir: ortak kurallar (kısa çalış, az arama, dil, kaynak) |
+
+- **Coordinator timeout override:** `build_member_runner`, coordinator için
+  `timeout_seconds = team.run_timeout_seconds` kullanır (üyeler kendi `agent.timeout_seconds`).
+- **Delegasyon bütçesi:** `delegate` tool'u, run'daki `kind="delegate"` mesaj sayısını
+  `team.max_delegations` ile kıyaslar; aşılırsa delege etmeden "team_board ile sentezle, final ver" mesajı döner.
+- **Roller netleştirilmeli:** `delegate(role, ...)` ROL ile çalışır — her uzman rol
+  (researcher/worker/evaluator/planner) ayrı atanmalı; iki üyeye aynı rol verilirse
+  Coordinator yalnız ilkine ulaşır (yaygın hata, timeout sebebi olabilir).
+- **Prompt rehberi (Anthropic):** her role net **hedef + çıktı formatı + tool/kaynak
+  rehberi + sınır + bütçe** ver; belirsiz/kısa talimat → tekrarlı arama, token israfı.
+
+UI: ekip oluşturma + ekip detay sayfasında **"Ekip ayarları (prompt & bütçe)"** bölümü.
+
 ## Çok-turlu sohbet (B3 / #3)
 
 Ekiple **tıpkı bir agent'la konuşur gibi** sohbet edilir: her mesaj bir tur (team
