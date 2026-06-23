@@ -77,6 +77,7 @@ class TeamResponse(BaseModel):
 
 class RunTeamRequest(BaseModel):
     input: Annotated[str, Field(min_length=1)]
+    conversation_id: uuid.UUID | None = None  # B3: çok-turlu sohbet (yoksa yeni sohbet)
 
 
 class TeamRunResponse(BaseModel):
@@ -86,6 +87,7 @@ class TeamRunResponse(BaseModel):
     input: str
     final_output: str | None
     error_message: str | None
+    conversation_id: uuid.UUID | None
     started_at: str | None
     ended_at: str | None
     created_at: str
@@ -95,10 +97,20 @@ class TeamRunResponse(BaseModel):
         return cls(
             id=r.id, team_id=r.team_id, status=r.status, input=r.input,
             final_output=r.final_output, error_message=r.error_message,
+            conversation_id=getattr(r, "conversation_id", None),
             started_at=r.started_at.isoformat() if r.started_at else None,
             ended_at=r.ended_at.isoformat() if r.ended_at else None,
             created_at=r.created_at.isoformat(),
         )
+
+
+class TeamConversation(BaseModel):
+    conversation_id: uuid.UUID
+    first_input: str
+    turns: int
+    last_status: str
+    created_at: str
+    updated_at: str
 
 
 class TeamRunMessageResponse(BaseModel):

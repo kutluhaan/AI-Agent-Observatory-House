@@ -70,6 +70,8 @@ class TeamRun(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending|running|completed|failed
+    # B3: çok-turlu sohbet grubu — aynı conversation_id'li run'lar bir sohbet
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     input: Mapped[str] = mapped_column(Text, nullable=False)
     final_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

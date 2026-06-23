@@ -92,6 +92,7 @@ async def build_member_runner(
     team_run_id: uuid.UUID,
     parent_trace_id: str | None = None,
     on_tool=None,
+    history: list | None = None,
 ) -> AgentRunner:
     """Bir ekip üyesi için rol promptu + kadro + ekip tool'larıyla AgentRunner kurar."""
     agent = (await db.execute(
@@ -163,5 +164,6 @@ async def build_member_runner(
         tool_context=tool_context,
         mcp_tools=mcp_tools,
         http_tools=http_tools,
+        history=history,
         on_tool=on_tool if on_tool is not None else make_tool_recorder(db, team_run_id, member.role, org_id),
     )

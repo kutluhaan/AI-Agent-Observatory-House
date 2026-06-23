@@ -57,6 +57,23 @@ Ekibin nasıl çalıştığını **canlı ve minimal** izlersin:
 - Akış: **kim→kim delege (neden=görev) → o üyenin tool çağrıları (minimal) → sonuç →
   … → final (markdown)**.
 
+## Çok-turlu sohbet (B3 / #3)
+
+Ekiple **tıpkı bir agent'la konuşur gibi** sohbet edilir: her mesaj bir tur (team
+run); Coordinator **önceki turları hatırlar**; canlı işbirliği akışı + markdown yanıt.
+
+- **Gruplama:** `team_runs.conversation_id` (migration `0023`). Aynı conversation'daki
+  run'lar bir sohbet. `POST /teams/{id}/run` `conversation_id` opsiyonel — yoksa yeni
+  sohbet başlar; varsa o sohbete eklenir.
+- **Hafıza:** TeamRunner, aynı conversation'daki **önceki tamamlanmış run'ları**
+  (input + final_output) `history` olarak Coordinator runner'ına verir.
+- **Endpoint'ler:** `GET /teams/{id}/conversations` (sohbet listesi),
+  `GET /teams/{id}/conversations/{conv}` (turlar).
+- **UI:** `/teams/{id}/chat` — mesaj yaz → Enter; her tur: kullanıcı balonu +
+  **katlanabilir canlı işbirliği** (delege→tool→sonuç, C'deki akış) + **markdown
+  final yanıt**. Geçmiş sohbetler seçici ile yüklenir; "Yeni" ile sıfırdan başlar.
+  Ekip detayında **Sohbet** butonu.
+
 ### Entegrasyon (C)
 | | Dosya |
 |---|---|

@@ -164,7 +164,9 @@ async def run_team(
     await _get_team_or_404(team_id, ctx.org_id, db)
     run = TeamRun(
         id=uuid.uuid4(), team_id=team_id, organization_id=ctx.org_id,
-        status="pending", input=body.input, created_at=datetime.now(UTC),
+        status="pending", input=body.input,
+        conversation_id=body.conversation_id or uuid.uuid4(),  # B3: yoksa yeni sohbet
+        created_at=datetime.now(UTC),
     )
     db.add(run)
     await db.commit()
@@ -183,6 +185,47 @@ async def list_team_runs(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantCont
         .order_by(TeamRun.created_at.desc()).limit(50)
     )).scalars().all()
     return success([TeamRunResponse.from_orm(r).model_dump() for r in rows])
+
+
+@router.get("/{team_id}/conversations")
+async def list_team_conversations(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    """B3: ekibin sohbetleri (conversation_id'ye göre gruplu, yeni → eski)."""
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    rows = (await db.execute(
+        select(TeamRun).where(
+            TeamRun.team_id == team_id, TeamRun.organization_id == ctx.org_id,
+            TeamRun.conversation_id.is_not(None),
+        ).order_by(TeamRun.created_at.asc())
+    )).scalars().all()
+    grouped: dict = {}
+    for r in rows:
+        grouped.setdefault(r.conversation_id, []).append(r)
+    convs = [
+        {
+            "conversation_id": str(cid),
+            "first_input": g[0].input,
+            "turns": len(g),
+            "last_status": g[-1].status,
+            "created_at": g[0].created_at.isoformat(),
+            "updated_at": g[-1].created_at.isoformat(),
+        }
+        for cid, g in grouped.items()
+    ]
+    convs.sort(key=lambda c: c["updated_at"], reverse=True)
+    return success(convs)
+
+
+@router.get("/{team_id}/conversations/{conversation_id}")
+async def get_team_conversation(team_id: uuid.UUID, conversation_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    """B3: bir sohbetteki tüm turlar (run'lar, eski → yeni)."""
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    runs = (await db.execute(
+        select(TeamRun).where(
+            TeamRun.team_id == team_id, TeamRun.organization_id == ctx.org_id,
+            TeamRun.conversation_id == conversation_id,
+        ).order_by(TeamRun.created_at.asc())
+    )).scalars().all()
+    return success([TeamRunResponse.from_orm(r).model_dump() for r in runs])
 
 
 @router.get("/{team_id}/stats")

@@ -68,10 +68,27 @@ class TeamRunner:
                 await db.commit()
                 return
 
+            # B3: çok-turlu sohbet — aynı conversation'daki önceki turları history olarak ver
+            history: list = []
+            if run.conversation_id:
+                from app.services.providers.base import Message
+                prior = (await db.execute(
+                    select(TeamRun).where(
+                        TeamRun.conversation_id == run.conversation_id,
+                        TeamRun.id != run.id,
+                        TeamRun.status == "completed",
+                        TeamRun.created_at < run.created_at,
+                    ).order_by(TeamRun.created_at.asc())
+                )).scalars().all()
+                for p in prior:
+                    history.append(Message(role="user", content=p.input))
+                    history.append(Message(role="assistant", content=p.final_output or ""))
+
             try:
                 runner = await build_member_runner(
                     db, self.redis, coordinator, members,
                     org_id=run.organization_id, team_id=run.team_id, team_run_id=run.id,
+                    history=history,
                 )
                 result = await runner.run(run.input)
                 await record_message(db, run.id, "final", result.content, from_role=COORDINATOR, org_id=run.organization_id)

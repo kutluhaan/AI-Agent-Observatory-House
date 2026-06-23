@@ -109,3 +109,24 @@ async def test_run_detail_not_found(owner_client):
     resp = await client.get(f"/team-runs/{uuid.uuid4()}")
     assert resp.status_code == 404
     assert_error(resp.json(), "TEAM_RUN_NOT_FOUND")
+
+
+@pytest.mark.asyncio
+async def test_team_chat_conversation(owner_client):
+    """B3: aynı conversation_id ile çok-turlu; listeleme + tur getirme."""
+    client, _, _ = owner_client
+    tid = assert_success((await client.post("/teams", json=await _team(client))).json())["id"]
+    with patch("app.services.team.runner.TeamRunner.run", new_callable=AsyncMock):
+        r1 = assert_success((await client.post(f"/teams/{tid}/run", json={"input": "ilk soru"})).json())
+        conv = r1["conversation_id"]
+        assert conv  # her run bir sohbete ait
+        r2 = assert_success((await client.post(f"/teams/{tid}/run", json={"input": "ikinci soru", "conversation_id": conv})).json())
+        assert r2["conversation_id"] == conv
+
+    convs = assert_success((await client.get(f"/teams/{tid}/conversations")).json())
+    mine = next((c for c in convs if c["conversation_id"] == conv), None)
+    assert mine and mine["turns"] == 2 and mine["first_input"] == "ilk soru"
+
+    runs = assert_success((await client.get(f"/teams/{tid}/conversations/{conv}")).json())
+    assert len(runs) == 2
+    assert [r["input"] for r in runs] == ["ilk soru", "ikinci soru"]  # eski → yeni

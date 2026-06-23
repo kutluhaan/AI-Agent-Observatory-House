@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, ChevronRight } from "lucide-react";
+import { ArrowLeft, Play, ChevronRight, MessageSquare } from "lucide-react";
 import { api, ApiError, type Team, type TeamRun, type TeamStats } from "@/lib/api";
 import { roleIcon, roleColor } from "@/lib/team-roles";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,15 @@ export default function TeamDetailPage() {
         <ArrowLeft size={13} />Ekipler
       </Link>
 
-      <h1 className="text-xl font-semibold text-zinc-100">{team?.name}</h1>
-      {team?.description && <p className="mt-1 text-sm text-zinc-500">{team.description}</p>}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-100">{team?.name}</h1>
+          {team?.description && <p className="mt-1 text-sm text-zinc-500">{team.description}</p>}
+        </div>
+        <Link href={`/teams/${id}/chat`}>
+          <Button size="sm"><MessageSquare size={13} />Sohbet</Button>
+        </Link>
+      </div>
 
       {error && <Alert variant="error" className="my-4">{error}</Alert>}
 
