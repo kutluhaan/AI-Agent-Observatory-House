@@ -63,4 +63,8 @@ def register_notify_tools() -> None:
             hint = f"'{channel}'" if channel else "(default)"
             return f"[notify error: no notification channel {hint} — Bildirim Kanalları'ndan ekle]"
         ok, detail = await send_webhook(decrypt_value(ch.encrypted_url), message)
+        # D: feed'e 'sent' girdisi
+        from app.services.notifications.log import log_notification
+        await log_notification(ctx.db, ctx.org_id, kind="sent", level="success" if ok else "error",
+                               title=f"Bildirim → {ch.name}", body=message, source=ch.name)
         return f"Bildirim gönderildi → {ch.name}." if ok else f"[notify error: {ch.name} failed — {detail}]"

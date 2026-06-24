@@ -1,12 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2 } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2, Bell } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -41,7 +42,34 @@ function NavTabs() {
           </Link>
         );
       })}
+      <NotificationsTab />
     </nav>
+  );
+}
+
+function NotificationsTab() {
+  const pathname = usePathname();
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.get<{ count: number }>("/notifications/unread-count").then((r) => alive && setCount(r.count)).catch(() => {});
+    load();
+    const t = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, [pathname]); // sayfa değişince (ör. /notifications ziyaretinden sonra) yenile
+  const active = pathname.startsWith("/notifications");
+  return (
+    <Link href="/notifications" title="Bildirimler"
+      className={cn("relative flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+        active ? "bg-zinc-800/80 text-zinc-100" : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300")}>
+      <Bell size={13} className={active ? "text-indigo-400" : ""} />
+      Bildirimler
+      {count > 0 && (
+        <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-semibold text-white">
+          {count > 9 ? "9+" : count}
+        </span>
+      )}
+    </Link>
   );
 }
 

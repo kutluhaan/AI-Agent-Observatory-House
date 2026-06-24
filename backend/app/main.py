@@ -221,6 +221,9 @@ app.include_router(db_connections_router, prefix="/db-connections", tags=["datab
 from app.api.v1.github_connections import router as github_connections_router
 app.include_router(github_connections_router, prefix="/github-connections", tags=["github"])
 
+from app.api.v1.notifications import router as notifications_router
+app.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
+
 from app.api.v1.teams import router as teams_router, team_runs_router
 app.include_router(teams_router, prefix="/teams", tags=["teams"])
 app.include_router(team_runs_router, prefix="/team-runs", tags=["teams"])

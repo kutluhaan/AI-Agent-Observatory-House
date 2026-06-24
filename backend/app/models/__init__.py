@@ -28,6 +28,8 @@ from app.models.agent_prompt_version import AgentPromptVersion
 from app.models.db_connection import DbConnection
 from app.models.github_connection import GithubConnection
 from app.models.team_knowledge import TeamKnowledge
+from app.models.notification_feed import Notification
+from app.models.team_file import TeamFile
 
 __all__ = [
     "User",
@@ -60,4 +62,6 @@ __all__ = [
     "DbConnection",
     "GithubConnection",
     "TeamKnowledge",
+    "Notification",
+    "TeamFile",
 ]

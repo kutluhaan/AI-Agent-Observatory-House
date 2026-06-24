@@ -27,7 +27,15 @@ DESTRUCTIVE_FILE_TOOLS = ["delete_file", "modify_file", "remove_folder"]
 
 
 def _no_fs() -> str:
-    return "[error: this agent has no file system]"
+    return "[error: no file system context]"
+
+
+def _resolve(ctx: ToolContext):
+    """Ekip bağlamında ORTAK ekip FS'i, yoksa agent FS. (store_module, owner_id) döner."""
+    if ctx.team_id is not None:
+        from app.services.team import file_store as team_store
+        return team_store, ctx.team_id
+    return file_store, ctx.agent_id
 
 
 def register_file_tools() -> None:
@@ -51,9 +59,10 @@ def register_file_tools() -> None:
         },
     )
     async def write_file(ctx: ToolContext, path: str, content: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.write_file(ctx.agent_id, ctx.org_id, path, content)
+        return await store.write_file(oid,ctx.org_id, path, content)
 
     @ToolRegistry.register(
         name="read_file",
@@ -65,9 +74,10 @@ def register_file_tools() -> None:
         },
     )
     async def read_file(ctx: ToolContext, path: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.read_file(ctx.agent_id, path)
+        return await store.read_file(oid,path)
 
     @ToolRegistry.register(
         name="modify_file",
@@ -86,9 +96,10 @@ def register_file_tools() -> None:
         },
     )
     async def modify_file(ctx: ToolContext, path: str, old_string: str, new_string: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.modify_file(ctx.agent_id, path, old_string, new_string)
+        return await store.modify_file(oid,path, old_string, new_string)
 
     @ToolRegistry.register(
         name="delete_file",
@@ -100,9 +111,10 @@ def register_file_tools() -> None:
         },
     )
     async def delete_file(ctx: ToolContext, path: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.delete_file(ctx.agent_id, path)
+        return await store.delete_file(oid,path)
 
     @ToolRegistry.register(
         name="list_files",
@@ -116,9 +128,10 @@ def register_file_tools() -> None:
         },
     )
     async def list_files(ctx: ToolContext, path: str | None = None) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.list_files(ctx.agent_id, path)
+        return await store.list_files(oid,path)
 
     @ToolRegistry.register(
         name="make_directory",
@@ -130,9 +143,10 @@ def register_file_tools() -> None:
         },
     )
     async def make_directory(ctx: ToolContext, path: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.make_directory(ctx.agent_id, ctx.org_id, path)
+        return await store.make_directory(oid,ctx.org_id, path)
 
     @ToolRegistry.register(
         name="search_files",
@@ -147,9 +161,10 @@ def register_file_tools() -> None:
         },
     )
     async def search_files(ctx: ToolContext, query: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.search_files(ctx.agent_id, query)
+        return await store.search_files(oid,query)
 
     @ToolRegistry.register(
         name="move_file",
@@ -164,9 +179,10 @@ def register_file_tools() -> None:
         },
     )
     async def move_file(ctx: ToolContext, source: str, destination: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.move_file(ctx.agent_id, source, destination)
+        return await store.move_file(oid,source, destination)
 
     @ToolRegistry.register(
         name="remove_folder",
@@ -181,6 +197,7 @@ def register_file_tools() -> None:
         },
     )
     async def remove_folder(ctx: ToolContext, path: str) -> str:
-        if ctx.agent_id is None:
+        store, oid = _resolve(ctx)
+        if oid is None:
             return _no_fs()
-        return await file_store.remove_folder(ctx.agent_id, path)
+        return await store.remove_folder(oid,path)

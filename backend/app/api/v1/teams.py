@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, datetime
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -318,6 +318,31 @@ async def delete_team_knowledge(team_id: uuid.UUID, kid: uuid.UUID, db=Depends(g
     k = await _get_tk_or_404(team_id, kid, ctx.org_id, db)
     await db.delete(k)
     await db.commit()
+
+
+# ─── Ekip ortak dosya sistemi (E) ─────────────────────────
+
+@router.get("/{team_id}/files")
+async def list_team_files(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    """Ekibin ortak dosyalarını listeler (üyeler buraya yazar)."""
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    from app.services.team import file_store as tfs
+    rows = await tfs.list_all(db, team_id)
+    return success([
+        {"path": r.path, "is_dir": r.is_dir, "size_bytes": r.size_bytes, "updated_at": r.updated_at.isoformat()}
+        for r in rows
+    ])
+
+
+@router.get("/{team_id}/files/content")
+async def get_team_file(team_id: uuid.UUID, path: str = Query(...), db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    """Bir ekip dosyasının içeriğini döndürür (görüntüleme/indirme)."""
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    from app.services.team import file_store as tfs
+    f = await tfs.get_one(db, team_id, path)
+    if f is None or f.is_dir:
+        raise NotFoundError("TEAM_FILE_NOT_FOUND", "File not found.")
+    return success({"path": f.path, "content": f.content or "", "size_bytes": f.size_bytes})
 
 
 @router.get("/{team_id}/stats")

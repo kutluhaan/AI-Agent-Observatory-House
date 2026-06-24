@@ -18,7 +18,7 @@ from app.models.team import TeamMember, TeamRunMessage
 from app.services.agent.base import AgentConfig
 from app.services.agent.registry import ToolContext
 from app.services.agent.runner import AgentRunner
-from app.services.agent.tools.files import DESTRUCTIVE_FILE_TOOLS, FILE_TOOL_NAMES
+from app.services.agent.tools.files import FILE_TOOL_NAMES
 from app.services.providers.factory import get_provider_for_agent
 from app.services.team.roles import COORDINATOR, ROLE_LABELS
 from app.services.trace_collector import Tracer
@@ -30,13 +30,33 @@ _MEMBER_TOOLS = ["team_share", "team_board"]
 _TEAM_TOOLS = {"delegate", "team_share", "team_board"}
 
 
+def _tool_payload(name: str, args) -> dict | None:
+    """İşbirliği UI için tool argümanından özet (web_search→sorgu, write_todos→maddeler)."""
+    if not isinstance(args, dict):
+        return None
+    if name == "write_todos":
+        return {"todos": args.get("todos") or []}
+    if name in ("web_search", "get_market_news"):
+        return {"query": str(args.get("query", ""))[:200]}
+    if name in ("read_url", "read_pdf"):
+        return {"url": str(args.get("url", ""))[:300]}
+    if name == "read_urls":
+        return {"urls": [str(u)[:200] for u in (args.get("urls") or [])][:8]}
+    # genel: ilk birkaç argümanı kısa stringe çevir
+    out = {}
+    for k, v in list(args.items())[:4]:
+        out[k] = (v if isinstance(v, (int, float, bool)) else str(v)[:120])
+    return out or None
+
+
 def make_tool_recorder(db: AsyncSession, team_run_id: uuid.UUID, role: str, org_id: uuid.UUID | None = None):
     """C1: bir üyenin tool çağrılarını timeline'a 'tool' mesajı olarak kaydeden callback üretir."""
     async def on_tool(name: str, args, result: str) -> None:
         if name in _TEAM_TOOLS:
             return
         brief = result if len(result) <= 400 else result[:400] + "…"
-        await record_message(db, team_run_id, "tool", brief, from_role=role, title=name, org_id=org_id)
+        await record_message(db, team_run_id, "tool", brief, from_role=role, title=name,
+                             payload=_tool_payload(name, args), org_id=org_id)
     return on_tool
 
 
@@ -49,6 +69,7 @@ async def record_message(
     from_role: str | None = None,
     to_role: str | None = None,
     title: str | None = None,
+    payload: dict | None = None,
     org_id: uuid.UUID | None = None,
 ) -> None:
     db.add(TeamRunMessage(
@@ -59,6 +80,7 @@ async def record_message(
         to_role=to_role,
         title=title,
         content=content or "",
+        payload=payload,
     ))
     await db.commit()
     # C2: org kanalına "değişti, yenile" ping'i (frontend ilgili run'ı yeniden çeker)
@@ -145,14 +167,12 @@ async def build_member_runner(
 
     system_prompt = "\n\n".join(p for p in parts if p)
 
-    # Üyenin kendi tool'ları + ekip tool'ları (+ FS açıksa dosya tool'ları)
+    # Üyenin kendi tool'ları + EKİP ORTAK dosya sistemi (E: her üye paylaşır) + ekip tool'ları
     tools = list(agent.tool_names or [])
     hitl = [n for n in (agent.hitl_tool_names or []) if n != "ask_user"]
-    if agent.file_system_enabled:
-        tools += FILE_TOOL_NAMES
-        for t in DESTRUCTIVE_FILE_TOOLS:
-            if t not in hitl:
-                hitl.append(t)
+    for t in FILE_TOOL_NAMES:  # E: ekip ortak FS — tüm üyelere ver (ctx.team_id ile team store'a yazar)
+        if t not in tools:
+            tools.append(t)
     tools += _COORDINATOR_TOOLS if is_coordinator else _MEMBER_TOOLS
 
     # Coordinator tüm orkestrasyonu sarar → ekip-seviye üst süre; üyeler kendi timeout'u

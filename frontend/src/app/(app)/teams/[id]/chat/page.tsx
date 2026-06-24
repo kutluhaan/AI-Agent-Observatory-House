@@ -6,11 +6,11 @@ import Link from "next/link";
 import {
   ArrowLeft, Send, Plus, MessageSquare, Trash2, Users, Settings2,
   ArrowRight, Wrench, StickyNote, ChevronDown, CheckCircle2, User as UserIcon,
-  BookOpen, Eye,
+  BookOpen, Eye, Circle, CircleDot, ListChecks, Search, Link2, FolderTree, Download,
 } from "lucide-react";
 import {
   api, ApiError,
-  type Team, type TeamRun, type TeamRunDetail, type TeamRunMessage, type TeamConversation, type Agent,
+  type Team, type TeamRun, type TeamRunDetail, type TeamRunMessage, type TeamConversation, type Agent, type TodoItem,
 } from "@/lib/api";
 import { roleIcon, roleColor } from "@/lib/team-roles";
 import { subscribeTeamRuns } from "@/lib/ws";
@@ -51,6 +51,7 @@ export default function TeamChatPage() {
   const [error, setError] = useState("");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showTeam, setShowTeam] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const refreshConversations = useCallback(() => {
@@ -140,6 +141,10 @@ export default function TeamChatPage() {
     }
   }
 
+  // rol → agent adı (işbirliği akışında ikon yerine isim göster)
+  const roleName = new Map((team?.members ?? []).map((m) => [m.role, m.agent_name ?? m.role]));
+  const nameOf = (r: string | null) => (r ? roleName.get(r) ?? r : "—");
+
   return (
     <div className="flex h-[calc(100dvh-3rem)] overflow-hidden">
       {/* Sohbet kenar çubuğu */}
@@ -197,6 +202,9 @@ export default function TeamChatPage() {
               <Link href={`/teams/${id}/knowledge`} className={topBtn}>
                 <BookOpen size={12} />Knowledge Base
               </Link>
+              <button type="button" onClick={() => setShowFiles(true)} className={topBtn}>
+                <FolderTree size={12} />Dosyalar
+              </button>
               <button type="button" onClick={() => setShowTeam(true)} className={topBtn}>
                 <Eye size={12} />Ekibi Tanı
               </button>
@@ -216,7 +224,7 @@ export default function TeamChatPage() {
                 <p className="mt-1 text-xs text-zinc-600">İşbirliğini canlı, yanıtı en sonda görürsün.</p>
               </div>
             )}
-            {turns.map((t, i) => <TurnBubble key={t.runId ?? `pending-${i}`} turn={t} />)}
+            {turns.map((t, i) => <TurnBubble key={t.runId ?? `pending-${i}`} turn={t} name={nameOf} />)}
           </div>
         </div>
 
@@ -241,6 +249,7 @@ export default function TeamChatPage() {
       </div>
 
       <TeamModal open={showTeam} onClose={() => setShowTeam(false)} team={team} agents={agents} />
+      <FilesModal open={showFiles} onClose={() => setShowFiles(false)} teamId={id} />
     </div>
   );
 }
@@ -293,9 +302,80 @@ function ToolTag({ label }: { label: string }) {
   return <span className="rounded bg-zinc-800/70 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">{label}</span>;
 }
 
+// ── Ekip ortak dosya sistemi modalı ─────────────────────────
+
+interface TeamFileEntry { path: string; is_dir: boolean; size_bytes: number; updated_at: string }
+
+function FilesModal({ open, onClose, teamId }: { open: boolean; onClose: () => void; teamId: string }) {
+  const [files, setFiles] = useState<TeamFileEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [openFile, setOpenFile] = useState<{ path: string; content: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) { setOpenFile(null); return; }
+    setLoading(true);
+    api.get<TeamFileEntry[]>(`/teams/${teamId}/files`).then(setFiles).catch(() => setFiles([])).finally(() => setLoading(false));
+  }, [open, teamId]);
+
+  async function view(path: string) {
+    try {
+      const f = await api.get<{ path: string; content: string }>(`/teams/${teamId}/files/content?path=${encodeURIComponent(path)}`);
+      setOpenFile(f);
+    } catch { /* ignore */ }
+  }
+
+  function download(path: string, content: string) {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = path.split("/").pop() || "file.txt";
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  if (!open) return null;
+  return (
+    <Modal open title="Ekip dosyaları" onClose={onClose} className="max-w-xl">
+      <div className="flex flex-col gap-3">
+        <p className="text-[11px] text-zinc-600">Ekip üyeleri bu ortak alana yazar; buradan görüntüle/indir.</p>
+        {loading ? (
+          <div className="flex justify-center py-8"><Spinner className="h-5 w-5" /></div>
+        ) : files.length === 0 ? (
+          <p className="py-6 text-center text-xs text-zinc-600">Henüz dosya yok. Bir üye write_file çağırınca burada görünür.</p>
+        ) : (
+          <div className="flex max-h-[40vh] flex-col gap-1 overflow-y-auto">
+            {files.map((f) => (
+              <div key={f.path} className="flex items-center gap-2 rounded-md border border-zinc-800/60 bg-zinc-950/40 px-2.5 py-2">
+                <FolderTree size={13} className={cn("shrink-0", f.is_dir ? "text-amber-400" : "text-zinc-500")} />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">{f.path}{f.is_dir ? "/" : ""}</span>
+                {!f.is_dir && (
+                  <>
+                    <span className="shrink-0 text-[10px] text-zinc-600">{f.size_bytes} B</span>
+                    <button onClick={() => view(f.path)} className="shrink-0 rounded p-1 text-zinc-500 hover:text-zinc-200" title="Görüntüle"><Eye size={13} /></button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {openFile && (
+          <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/50">
+            <div className="flex items-center gap-2 border-b border-zinc-800/60 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">{openFile.path}</span>
+              <button onClick={() => download(openFile.path, openFile.content)} className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"><Download size={12} />İndir</button>
+              <button onClick={() => setOpenFile(null)} className="text-zinc-600 hover:text-zinc-300">×</button>
+            </div>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap px-3 py-2 text-[11px] text-zinc-400">{openFile.content}</pre>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // ── Tur baloncuğu (kullanıcı + ekip yanıtı) ─────────────────
 
-function TurnBubble({ turn }: { turn: Turn }) {
+function TurnBubble({ turn, name }: { turn: Turn; name: (r: string | null) => string }) {
   const d = turn.detail;
   const status = d?.run.status;
   const running = !d || status === "running" || status === "pending";
@@ -321,7 +401,7 @@ function TurnBubble({ turn }: { turn: Turn }) {
           <Users size={14} className="text-indigo-400" />
         </div>
         <div className="flex max-w-[85%] flex-col gap-2">
-          {collab.length > 0 && <Collaboration messages={collab} running={running} />}
+          {collab.length > 0 && <Collaboration messages={collab} running={running} name={name} />}
           {running && collab.length === 0 && (
             <div className="flex items-center gap-2 px-1 text-xs text-zinc-600"><Spinner className="h-3 w-3" />ekip çalışıyor…</div>
           )}
@@ -337,71 +417,120 @@ function TurnBubble({ turn }: { turn: Turn }) {
   );
 }
 
-function Collaboration({ messages, running }: { messages: TeamRunMessage[]; running: boolean }) {
+function Collaboration({ messages, running, name }: { messages: TeamRunMessage[]; running: boolean; name: (r: string | null) => string }) {
   const [open, setOpen] = useState(true);
-  // Final hazır olunca işbirliğini varsayılan kapat (yanıt öne çıksın)
   useEffect(() => { if (!running) setOpen(false); }, [running]);
   return (
     <div className="w-full rounded-lg border border-zinc-800/60 bg-zinc-900/40 text-xs">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-900/70"
-      >
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-900/70">
         {running ? <Spinner className="h-3 w-3" /> : <CheckCircle2 size={12} className="text-green-400" />}
         <span className="font-medium text-zinc-300">İşbirliği</span>
         <span className="text-zinc-600">· {messages.length} adım</span>
         <ChevronDown size={12} className={cn("ml-auto transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <div className="flex flex-col gap-1.5 border-t border-zinc-800/60 px-3 py-2">
-          {messages.map((m) => <MsgLine key={m.id} m={m} />)}
+        <div className="flex flex-col gap-2 border-t border-zinc-800/60 px-3 py-2.5">
+          {messages.map((m) => <MsgLine key={m.id} m={m} name={name} />)}
         </div>
       )}
     </div>
   );
 }
 
-function MsgLine({ m }: { m: TeamRunMessage }) {
-  const [open, setOpen] = useState(false);
-  const FromI = m.from_role ? roleIcon(m.from_role) : Wrench;
+function Who({ role, name }: { role: string | null; name: (r: string | null) => string }) {
+  const I = role ? roleIcon(role) : Wrench;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <I size={12} className={cn("shrink-0", role ? roleColor(role) : "text-zinc-500")} />
+      <span className="font-medium text-zinc-200">{name(role)}</span>
+    </span>
+  );
+}
 
+function TodoChecklist({ todos }: { todos: TodoItem[] }) {
+  return (
+    <div className="mt-1.5 flex flex-col gap-1">
+      {todos.map((t, i) => {
+        const Icon = t.status === "completed" ? CheckCircle2 : t.status === "in_progress" ? CircleDot : Circle;
+        return (
+          <div key={i} className="flex items-start gap-1.5 text-[11px]">
+            <Icon size={12} className={cn("mt-0.5 shrink-0", t.status === "completed" ? "text-green-400" : t.status === "in_progress" ? "text-indigo-400" : "text-zinc-600")} />
+            <span className={cn("leading-snug", t.status === "completed" ? "text-zinc-600 line-through" : "text-zinc-300")}>{t.content}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MsgLine({ m, name }: { m: TeamRunMessage; name: (r: string | null) => string }) {
+  const [open, setOpen] = useState(false);
+  const p = m.payload ?? {};
+
+  // Pano
   if (m.kind === "board") {
     return (
       <div className="rounded-md border border-zinc-800/50 bg-zinc-950/30">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] text-amber-300/90">
-          <StickyNote size={11} className="shrink-0" />
-          <span className="font-medium">{m.title}</span>
-          <span className="text-zinc-600">· {m.from_role}</span>
-          <ChevronDown size={10} className={cn("ml-auto transition-transform", open && "rotate-180")} />
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px]">
+          <StickyNote size={12} className="shrink-0 text-amber-400" />
+          <Who role={m.from_role} name={name} />
+          <span className="text-zinc-500">panoya yazdı:</span>
+          <span className="min-w-0 flex-1 truncate text-amber-300/90">{m.title}</span>
+          <ChevronDown size={10} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
         </button>
-        {open && <div className="border-t border-zinc-800/50 px-2 py-1 text-[11px] text-zinc-400"><Markdown>{m.content}</Markdown></div>}
+        {open && <div className="border-t border-zinc-800/50 px-2 py-1.5 text-[11px] text-zinc-400"><Markdown>{m.content}</Markdown></div>}
       </div>
     );
   }
 
+  // Tool çağrısı
   if (m.kind === "tool") {
+    // write_todos → checkbox listesi (canlı ilerleme)
+    if (m.title === "write_todos" && Array.isArray(p.todos)) {
+      const todos = p.todos as TodoItem[];
+      const done = todos.filter((t) => t.status === "completed").length;
+      return (
+        <div className="rounded-md border border-zinc-800/50 bg-zinc-950/30 px-2 py-1.5">
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <Who role={m.from_role} name={name} />
+            <ListChecks size={12} className="text-indigo-400" />
+            <span className="text-zinc-500">görev listesi</span>
+            <span className="ml-auto text-zinc-600">{done}/{todos.length}</span>
+          </div>
+          <TodoChecklist todos={todos} />
+        </div>
+      );
+    }
+    // concise arg: web_search→sorgu, read_url→URL
+    const argNode = p.query
+      ? <span className="inline-flex min-w-0 items-center gap-1 text-zinc-500"><Search size={10} className="shrink-0" /><span className="truncate">{p.query}</span></span>
+      : p.url
+        ? <span className="inline-flex min-w-0 items-center gap-1 text-zinc-500"><Link2 size={10} className="shrink-0" /><span className="truncate">{p.url}</span></span>
+        : Array.isArray(p.urls)
+          ? <span className="text-zinc-500">{p.urls.length} URL</span>
+          : <span className="truncate text-zinc-600">{m.content}</span>;
     return (
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 text-left text-[11px]">
-        <FromI size={11} className={cn("shrink-0", m.from_role ? roleColor(m.from_role) : "text-amber-400")} />
+        <Who role={m.from_role} name={name} />
         <Wrench size={10} className="shrink-0 text-amber-400" />
         <span className="shrink-0 text-zinc-400">{m.title}</span>
-        <span className={cn("min-w-0 flex-1 text-zinc-600", !open && "truncate")}>· {open ? m.content.slice(0, 400) : m.content}</span>
+        <span className="min-w-0 flex-1">{open ? <span className="text-zinc-500">{m.content.slice(0, 400)}</span> : argNode}</span>
+        <ChevronDown size={10} className={cn("ml-auto shrink-0 transition-transform", open && "rotate-180")} />
       </button>
     );
   }
 
   // delegate | result
   const isDelegate = m.kind === "delegate";
-  const ToI = m.to_role ? roleIcon(m.to_role) : null;
   return (
     <div className="flex flex-col">
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-1.5 text-left text-[11px]">
-        <span className="flex shrink-0 items-center gap-1 pt-0.5">
-          {FromI && <FromI size={11} className={roleColor(m.from_role ?? "")} />}
-          <ArrowRight size={9} className="text-zinc-600" />
-          {ToI && <ToI size={11} className={roleColor(m.to_role ?? "")} />}
-          <span className="text-zinc-600">{isDelegate ? "delege" : "↩ sonuç"}</span>
+        <span className="flex shrink-0 flex-wrap items-center gap-1 pt-0.5">
+          <Who role={m.from_role} name={name} />
+          {isDelegate ? <ArrowRight size={11} className="text-zinc-600" /> : <span className="text-zinc-600">↩</span>}
+          <Who role={m.to_role} name={name} />
+          <span className="text-zinc-600">· {isDelegate ? "görev" : "sonuç"}</span>
         </span>
         <span className={cn("min-w-0 flex-1 text-zinc-400", !open && "truncate")}>{m.content}</span>
         <ChevronDown size={10} className={cn("ml-auto mt-0.5 shrink-0 text-zinc-700 transition-transform", open && "rotate-180")} />

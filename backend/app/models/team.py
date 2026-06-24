@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -101,6 +101,8 @@ class TeamRunMessage(Base):
     to_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # İşbirliği UI: tool argümanı/özeti (web_search sorgusu, write_todos maddeleri vb.)
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     run: Mapped["TeamRun"] = relationship("TeamRun", back_populates="messages")

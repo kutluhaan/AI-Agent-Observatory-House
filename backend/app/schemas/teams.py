@@ -132,13 +132,15 @@ class TeamRunMessageResponse(BaseModel):
     to_role: str | None
     title: str | None
     content: str
+    payload: dict | None = None
     created_at: str
 
     @classmethod
     def from_orm(cls, m: Any) -> "TeamRunMessageResponse":
         return cls(
             id=m.id, kind=m.kind, from_role=m.from_role, to_role=m.to_role,
-            title=m.title, content=m.content, created_at=m.created_at.isoformat(),
+            title=m.title, content=m.content, payload=getattr(m, "payload", None),
+            created_at=m.created_at.isoformat(),
         )
 
 

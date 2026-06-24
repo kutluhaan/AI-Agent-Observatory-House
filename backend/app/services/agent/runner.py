@@ -50,6 +50,19 @@ logger = structlog.get_logger()
 MAX_TOOL_RESULT_CHARS = 8000
 
 
+# Paralel çalıştırılması GÜVENSİZ tool'lar: paylaşılan ctx.db kullanır, alt-runner açar
+# veya dosya yazar (yarış). Bunlar tek adımda olsa bile SIRALI çalışır.
+_UNSAFE_PARALLEL: set[str] = {
+    "delegate", "team_share", "team_board", "call_agent",
+    "sql_query", "sql_schema", "sql_sample",
+    "gmail_search", "gmail_read", "gmail_send",
+    "calendar_list_events", "calendar_create_event", "drive_search", "drive_read_file",
+    "github_search", "github_repo_info", "github_issues", "github_read_file",
+    "send_notification",
+    "write_file", "modify_file", "delete_file", "make_directory", "move_file", "remove_folder",
+}
+
+
 def _truncate_for_context(text: str) -> str:
     if text is None:
         return ""
@@ -97,6 +110,7 @@ class AgentRunner(BaseAgent):
         self.ws_manager = ws_manager
         self.history = history or []
         self.on_tool = on_tool
+        self._on_tool_lock = asyncio.Lock()  # paralel tool yürütmede on_tool'u serialize et
         # F7.2: MCP tool'ları "mcp__{name}" olarak sunulur (native tool'larla çakışmaz)
         self._mcp_tools = mcp_tools or []
         self._mcp_by_name = {f"mcp__{t['name']}": t for t in self._mcp_tools}
@@ -462,47 +476,59 @@ class AgentRunner(BaseAgent):
                     content=result.content,
                     tool_calls=result.tool_calls,
                 ))
+                # Argümanları normalize et
+                parsed_calls: list[dict[str, Any]] = []
                 for call in result.tool_calls:
-                    tool_name = call.get("name", "")
                     raw_arguments = call.get("arguments", {})
-                    call_id = call.get("id", "")
-
-                    # Normalize arguments to dict — OpenAI non-streaming returns JSON strings
                     if isinstance(raw_arguments, str):
                         try:
-                            arguments: dict[str, Any] = json.loads(raw_arguments) if raw_arguments else {}
+                            a: dict[str, Any] = json.loads(raw_arguments) if raw_arguments else {}
                         except json.JSONDecodeError:
-                            arguments = {}
+                            a = {}
                     else:
-                        arguments = raw_arguments or {}
+                        a = raw_arguments or {}
+                    parsed_calls.append({"id": call.get("id", ""), "name": call.get("name", ""), "args": a})
 
-                    # ask_user — sync yolda da kullanıcı yanıtını bekle
-                    if tool_name == "ask_user" and self.hitl:
-                        answer = await self._ask_user_sync(arguments, step)
-                        messages.append(Message(role="tool", content=answer, tool_call_id=call_id))
+                def _interactive(n: str) -> bool:
+                    return bool(self.hitl) and (n == "ask_user" or n in self.config.hitl_tool_names)
+
+                results_by_id: dict[str, str] = {}
+
+                # Etkileşimli OLMAYAN tool'lar AYNI ANDA (paralel) — web_search/read_url vb. hızlanır
+                async def _run_one(p: dict[str, Any]) -> tuple[str, str]:
+                    await self.tracer.event("tool_call_start", {"name": p["name"], "arguments": p["args"], "step": step})
+                    res = await self._execute_tool(p["name"], p["args"])
+                    await self.tracer.event("tool_call_end", {"name": p["name"], "result": res, "step": step})
+                    return p["id"], res
+
+                # Yalnız 2+ GÜVENLİ (db'siz) tool varsa paralel; gerisi sıralı
+                safe = [p for p in parsed_calls if not _interactive(p["name"]) and p["name"] not in _UNSAFE_PARALLEL]
+                done: set[str] = set()
+                if len(safe) >= 2:
+                    for cid, res in await asyncio.gather(*[_run_one(p) for p in safe]):
+                        results_by_id[cid] = res
+                    done = {p["id"] for p in safe}
+
+                # Kalanlar SIRALI: tekli güvenli, güvensiz (db) tool'lar, ask_user/HITL
+                for p in parsed_calls:
+                    if p["id"] in done:
                         continue
+                    if _interactive(p["name"]):
+                        if p["name"] == "ask_user":
+                            results_by_id[p["id"]] = await self._ask_user_sync(p["args"], step)
+                            continue
+                        await self.tracer.event("tool_call_start", {"name": p["name"], "arguments": p["args"], "step": step})
+                        args2 = await self._hitl_gate(p["name"], p["args"], step)
+                    else:
+                        await self.tracer.event("tool_call_start", {"name": p["name"], "arguments": p["args"], "step": step})
+                        args2 = p["args"]
+                    res = await self._execute_tool(p["name"], args2)
+                    await self.tracer.event("tool_call_end", {"name": p["name"], "result": res, "step": step})
+                    results_by_id[p["id"]] = res
 
-                    await self.tracer.event("tool_call_start", {
-                        "name": tool_name,
-                        "arguments": arguments,
-                        "step": step,
-                    })
-
-                    # HITL gate — insan onayı gerekiyorsa askıya al
-                    if self.hitl and tool_name in self.config.hitl_tool_names:
-                        arguments = await self._hitl_gate(tool_name, arguments, step)
-
-                    tool_result = await self._execute_tool(tool_name, arguments)
-                    await self.tracer.event("tool_call_end", {
-                        "name": tool_name,
-                        "result": tool_result,
-                        "step": step,
-                    })
-                    messages.append(Message(
-                        role="tool",
-                        content=_truncate_for_context(tool_result),
-                        tool_call_id=call_id,
-                    ))
+                # Sonuçları ORİJİNAL sırada mesajlara ekle (LLM tool_call_id eşleşmesi için)
+                for p in parsed_calls:
+                    messages.append(Message(role="tool", content=_truncate_for_context(results_by_id.get(p["id"], "")), tool_call_id=p["id"]))
                 continue
 
             # Bilinmeyen finish_reason — güvenli çıkış
@@ -623,10 +649,12 @@ class AgentRunner(BaseAgent):
         """_execute_tool_inner'ı sarar; sonucu on_tool callback'ine (varsa) iletir (C1)."""
         result = await self._execute_tool_inner(tool_name, arguments)
         if self.on_tool is not None:
-            try:
-                await self.on_tool(tool_name, arguments, result)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("agent.on_tool_failed", tool=tool_name, error=str(exc))
+            # Paralel tool yürütmede on_tool (paylaşılan db'ye yazar) eşzamanlı çağrılmasın
+            async with self._on_tool_lock:
+                try:
+                    await self.on_tool(tool_name, arguments, result)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("agent.on_tool_failed", tool=tool_name, error=str(exc))
         return result
 
     async def _execute_tool_inner(self, tool_name: str, arguments: dict[str, Any] | str) -> str:

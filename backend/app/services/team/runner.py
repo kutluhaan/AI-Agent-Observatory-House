@@ -101,4 +101,12 @@ class TeamRunner:
             run.ended_at = datetime.now(UTC)
             await db.commit()
             await _broadcast_status(run.organization_id, run.id)
+            # D: sistem olayı feed'e
+            from app.services.notifications.log import log_notification
+            _ok = run.status == "completed"
+            await log_notification(
+                db, run.organization_id, kind="system", level="success" if _ok else "error",
+                title=f"Ekip çalıştırması {'tamamlandı' if _ok else 'başarısız'}: {team.name if team else ''}",
+                body=(run.final_output or run.error_message or "")[:500], source="team_run",
+            )
             logger.info("team_runner.done", run_id=str(run.id), status=run.status)
