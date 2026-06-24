@@ -28,6 +28,8 @@ from app.core.encryption import encrypt_value
 from app.core.redis import get_redis
 from app.core.responses import AppError, NotFoundError, success
 from app.models.agent import Agent
+from app.models.agent_prompt_version import AgentPromptVersion
+from app.services.agent.prompt_versions import config_dict, snapshot_agent
 from app.schemas.agents import (
     AgentResponse,
     CreateAgentRequest,
@@ -165,6 +167,7 @@ async def _build_runner(
         organization_id=str(ctx.org_id),
         name=agent.name,
         parent_trace_id=parent_trace_id,
+        metadata={"prompt_version": agent.prompt_version},  # it.6: hangi sürümle koştu
     )
 
     tool_context = ToolContext(
@@ -260,6 +263,8 @@ async def create_agent(
         custom_tool_ids=[str(i) for i in body.custom_tool_ids] if body.custom_tool_ids else None,
     )
     db.add(agent)
+    await db.flush()  # agent.id
+    snapshot_agent(db, agent, note="İlk sürüm", created_by=ctx.user_id)  # it.6: v1
     await db.commit()
     await db.refresh(agent)
 
@@ -452,11 +457,17 @@ async def update_agent(
     if "custom_tool_ids" in update_fields:
         ids = update_fields.pop("custom_tool_ids")
         agent.custom_tool_ids = [str(i) for i in ids] if ids else None
+    before = config_dict(agent)  # it.6: snapshot için önceki config
     for field_name, value in update_fields.items():
         if value is None and field_name not in _NULLABLE_FIELDS:
             continue
         setattr(agent, field_name, value)
     agent.updated_at = datetime.now(UTC)
+
+    # it.6: versiyonlanan bir alan değiştiyse yeni sürüm snapshot'ı al
+    if config_dict(agent) != before:
+        agent.prompt_version = (agent.prompt_version or 1) + 1
+        snapshot_agent(db, agent, note="Güncellendi", created_by=ctx.user_id)
 
     await db.commit()
     await db.refresh(agent)
@@ -472,6 +483,52 @@ async def delete_agent(
     agent = await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
     await db.delete(agent)
     await db.commit()
+
+
+# ─── Prompt sürümleri (it.6) ──────────────────────────────
+
+def _version_dict(v: AgentPromptVersion) -> dict:
+    return {
+        "version": v.version, "system_prompt": v.system_prompt, "provider": v.provider,
+        "model": v.model, "temperature": v.temperature, "max_tokens": v.max_tokens,
+        "tool_names": v.tool_names or [], "hitl_tool_names": v.hitl_tool_names or [],
+        "note": v.note, "created_at": v.created_at.isoformat(),
+    }
+
+
+@router.get("/{agent_id}/prompt-versions")
+async def list_prompt_versions(agent_id: uuid.UUID, db: AsyncSession = Depends(get_db),
+                               ctx: TenantContext = Depends(require_role("member"))):
+    agent = await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
+    rows = (await db.execute(
+        select(AgentPromptVersion).where(AgentPromptVersion.agent_id == agent_id)
+        .order_by(AgentPromptVersion.version.desc())
+    )).scalars().all()
+    return success({"active_version": agent.prompt_version, "versions": [_version_dict(v) for v in rows]})
+
+
+@router.post("/{agent_id}/prompt-versions/{version}/restore")
+async def restore_prompt_version(agent_id: uuid.UUID, version: int, db: AsyncSession = Depends(get_db),
+                                 ctx: TenantContext = Depends(require_role("admin"))):
+    agent = await _get_agent_or_404(agent_id, ctx.org_id, db)  # type: ignore[arg-type]
+    v = (await db.execute(select(AgentPromptVersion).where(
+        AgentPromptVersion.agent_id == agent_id, AgentPromptVersion.version == version))).scalar_one_or_none()
+    if v is None:
+        raise NotFoundError("PROMPT_VERSION_NOT_FOUND", f"Version {version} not found.")
+    # config'i geri yükle → yeni sürüm olarak snapshot (denetim izi korunur)
+    agent.system_prompt = v.system_prompt
+    agent.provider = v.provider
+    agent.model = v.model
+    agent.temperature = v.temperature
+    agent.max_tokens = v.max_tokens
+    agent.tool_names = list(v.tool_names or [])
+    agent.hitl_tool_names = list(v.hitl_tool_names or [])
+    agent.prompt_version = (agent.prompt_version or 1) + 1
+    agent.updated_at = datetime.now(UTC)
+    snapshot_agent(db, agent, note=f"v{version}'dan geri yüklendi", created_by=ctx.user_id)
+    await db.commit()
+    await db.refresh(agent)
+    return success(AgentResponse.from_orm(agent).model_dump())
 
 
 # ─── Run ──────────────────────────────────────────────────

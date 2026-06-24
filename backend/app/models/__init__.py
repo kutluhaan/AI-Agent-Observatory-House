@@ -24,6 +24,7 @@ from app.models.team import Team, TeamMember, TeamRun, TeamRunMessage
 from app.models.connection import ServiceConnection
 from app.models.custom_tool import CustomTool
 from app.models.notification import NotificationChannel
+from app.models.agent_prompt_version import AgentPromptVersion
 
 __all__ = [
     "User",
@@ -52,4 +53,5 @@ __all__ = [
     "ServiceConnection",
     "CustomTool",
     "NotificationChannel",
+    "AgentPromptVersion",
 ]

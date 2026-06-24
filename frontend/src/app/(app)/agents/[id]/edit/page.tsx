@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { api, type Agent } from "@/lib/api";
+import { ArrowLeft, History, RotateCcw, ChevronDown } from "lucide-react";
+import { api, ApiError, type Agent, type PromptVersionList } from "@/lib/api";
 import { AgentForm, type AgentFormValues } from "@/components/agent-form";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function EditAgentPage() {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +65,68 @@ export default function EditAgentPage() {
           submitLabel="Değişiklikleri kaydet"
           onSubmit={handleSave}
         />
+      )}
+
+      {agent && <PromptVersions agentId={id} activeVersion={agent.prompt_version} />}
+    </div>
+  );
+}
+
+// ── Geçmiş sürümler (it.6) ──────────────────────────────────
+
+function PromptVersions({ agentId, activeVersion }: { agentId: string; activeVersion: number }) {
+  const [data, setData] = useState<PromptVersionList | null>(null);
+  const [open, setOpen] = useState(false);
+  const [restoring, setRestoring] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.get<PromptVersionList>(`/agents/${agentId}/prompt-versions`).then(setData).catch(() => {});
+  }, [agentId]);
+
+  async function restore(v: number) {
+    if (!window.confirm(`v${v} sürümüne geri dön? (mevcut config yeni sürüm olarak saklanır)`)) return;
+    setRestoring(v);
+    setError("");
+    try {
+      await api.post(`/agents/${agentId}/prompt-versions/${v}/restore`);
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Geri yüklenemedi.");
+      setRestoring(null);
+    }
+  }
+
+  if (!data || data.versions.length <= 1) return null;
+
+  return (
+    <div className="mt-8">
+      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500 hover:text-zinc-300">
+        <History size={13} />
+        Geçmiş sürümler ({data.versions.length})
+        <ChevronDown size={12} className={cn("transition-transform", open && "rotate-180")} />
+      </button>
+      {error && <Alert variant="error" className="mt-2">{error}</Alert>}
+      {open && (
+        <div className="mt-3 overflow-hidden rounded-xl border border-zinc-800/80">
+          {data.versions.map((v, i) => (
+            <div key={v.version} className={cn("flex items-center gap-3 px-4 py-3", i > 0 && "border-t border-zinc-800/60")}>
+              <span className={cn("text-xs font-semibold", v.version === activeVersion ? "text-green-400" : "text-zinc-400")}>v{v.version}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs text-zinc-400">{v.note ?? "—"} · {v.model}</p>
+                <p className="truncate text-[11px] text-zinc-600">{v.system_prompt}</p>
+              </div>
+              <span className="shrink-0 text-[10px] text-zinc-700">{new Date(v.created_at).toLocaleString()}</span>
+              {v.version === activeVersion ? (
+                <span className="shrink-0 text-[10px] text-green-400">aktif</span>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => restore(v.version)} loading={restoring === v.version}>
+                  <RotateCcw size={12} />Geri yükle
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

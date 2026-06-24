@@ -64,6 +64,8 @@ class Agent(Base):
 
     max_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    # loop it.6: aktif prompt sürüm no (agent_prompt_versions ile)
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     # ["echo", "calculator"] gibi kayıtlı tool isimlerinin listesi
     tool_names: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

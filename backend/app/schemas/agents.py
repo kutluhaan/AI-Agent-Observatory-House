@@ -132,6 +132,7 @@ class AgentResponse(BaseModel):
     max_tokens: int | None
     max_steps: int
     timeout_seconds: int
+    prompt_version: int
     tool_names: list[str]
     hitl_tool_names: list[str]
     file_system_enabled: bool
@@ -157,6 +158,7 @@ class AgentResponse(BaseModel):
             max_tokens=agent.max_tokens,
             max_steps=agent.max_steps,
             timeout_seconds=agent.timeout_seconds,
+            prompt_version=getattr(agent, "prompt_version", 1),
             tool_names=agent.tool_names or [],
             hitl_tool_names=agent.hitl_tool_names or [],
             file_system_enabled=agent.file_system_enabled,

@@ -62,6 +62,7 @@ class Tracer:
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     started_at: str = field(default_factory=_now_iso)
     parent_trace_id: str | None = None
+    metadata: dict[str, Any] | None = None  # it.6: agent_start payload'ına eklenir (ör. prompt_version)
     _ended: bool = field(default=False, init=False, repr=False)
 
     def _base(self, type_: str, payload: dict[str, Any] | None, ts: str) -> dict[str, Any]:
@@ -77,7 +78,7 @@ class Tracer:
         return event
 
     async def start(self) -> None:
-        await _xadd(self.redis, self._base("agent_start", {"name": self.name}, self.started_at))
+        await _xadd(self.redis, self._base("agent_start", {"name": self.name, **(self.metadata or {})}, self.started_at))
 
     async def event(self, type_: str, payload: dict[str, Any] | None = None) -> None:
         await _xadd(self.redis, self._base(type_, payload, _now_iso()))
