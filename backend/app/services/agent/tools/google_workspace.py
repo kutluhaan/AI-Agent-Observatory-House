@@ -142,8 +142,9 @@ def register_google_tools() -> None:
             meta = await client.get(f"{_DRIVE}/{file_id}", headers=hdr, params={"fields": "name,mimeType"})
             if meta.status_code != 200:
                 return f"[drive error: meta failed ({meta.status_code}) {meta.text[:160]}{_scope_hint(meta.status_code, meta.text)}]"
-            mime = meta.json().get("mimeType", "")
-            name = meta.json().get("name", file_id)
+            md = meta.json()
+            mime = md.get("mimeType", "")
+            name = md.get("name", file_id)
             # Google-native (Docs/Sheets/Slides) → düz metin export; diğerleri → ham indir
             if mime.startswith("application/vnd.google-apps"):
                 r = await client.get(f"{_DRIVE}/{file_id}/export", headers=hdr, params={"mimeType": "text/plain"})

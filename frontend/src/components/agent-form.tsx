@@ -11,6 +11,8 @@ import {
   CalendarClock,
   Bell,
   Clock,
+  Database,
+  Github,
   ChevronDown,
 } from "lucide-react";
 import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool, type CustomTool } from "@/lib/api";
@@ -48,6 +50,8 @@ const CATEGORY_ICONS: Record<string, typeof Globe> = {
   operation: CalendarClock,
   messaging: Bell,
   utility: Clock,
+  database: Database,
+  github: Github,
 };
 
 export interface AgentFormValues {

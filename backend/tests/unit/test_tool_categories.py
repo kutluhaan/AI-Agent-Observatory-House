@@ -24,6 +24,10 @@ def _setup():
     register_notify_tools()
     from app.services.agent.tools.utility import register_utility_tools
     register_utility_tools()
+    from app.services.agent.tools.sql import register_sql_tools
+    register_sql_tools()
+    from app.services.agent.tools.github import register_github_tools
+    register_github_tools()
 
 
 def test_category_of():
@@ -39,7 +43,7 @@ def test_category_of():
 def test_build_categories_order_and_labels():
     _setup()
     cats = build_categories()
-    assert [c["key"] for c in cats] == ["file", "web", "self", "email", "finance", "operation", "messaging", "utility"]
+    assert [c["key"] for c in cats] == ["file", "web", "self", "email", "finance", "operation", "messaging", "utility", "database", "github"]
 
 
 def test_web_and_self_have_expected_tools():
@@ -105,6 +109,24 @@ def test_utility_category_has_tools():
     names = {t["name"] for t in cats["utility"]["tools"]}
     assert {"get_current_datetime", "date_calculate", "convert_units", "convert_currency"} <= names
     assert category_of("convert_units") == "utility"
+
+
+def test_database_category_has_sql_tools():
+    """loop it.8: database kategorisi SQL tool'larıyla dolu."""
+    _setup()
+    cats = {c["key"]: c for c in build_categories()}
+    names = {t["name"] for t in cats["database"]["tools"]}
+    assert {"sql_query", "sql_schema", "sql_sample"} <= names
+    assert category_of("sql_query") == "database"
+
+
+def test_github_category_has_tools():
+    """loop it.9: github kategorisi 4 tool ile dolu."""
+    _setup()
+    cats = {c["key"]: c for c in build_categories()}
+    names = {t["name"] for t in cats["github"]["tools"]}
+    assert {"github_search", "github_repo_info", "github_issues", "github_read_file"} <= names
+    assert category_of("github_search") == "github"
 
 
 def test_skill_tools_not_in_selectable_categories():

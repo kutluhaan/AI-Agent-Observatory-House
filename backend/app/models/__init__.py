@@ -25,6 +25,8 @@ from app.models.connection import ServiceConnection
 from app.models.custom_tool import CustomTool
 from app.models.notification import NotificationChannel
 from app.models.agent_prompt_version import AgentPromptVersion
+from app.models.db_connection import DbConnection
+from app.models.github_connection import GithubConnection
 
 __all__ = [
     "User",
@@ -54,4 +56,6 @@ __all__ = [
     "CustomTool",
     "NotificationChannel",
     "AgentPromptVersion",
+    "DbConnection",
+    "GithubConnection",
 ]

@@ -60,6 +60,15 @@ CATEGORY_OF: dict[str, str] = {
     "date_calculate": "utility",
     "convert_units": "utility",
     "convert_currency": "utility",
+    # loop it.8: Veritabanı & SQL (org DB bağlantısı — salt-okunur)
+    "sql_query": "database",
+    "sql_schema": "database",
+    "sql_sample": "database",
+    # loop it.9: GitHub (org PAT)
+    "github_search": "github",
+    "github_repo_info": "github",
+    "github_issues": "github",
+    "github_read_file": "github",
 }
 
 # Sıralı kategori kataloğu (UI gösterim sırası + etiketler)
@@ -79,6 +88,10 @@ CATEGORIES: list[dict] = [
     {"key": "messaging", "label": "Mesajlaşma & Bildirim", "note": "Bildirim Kanalları'ndan webhook ekle; agent mesaj/uyarı gönderir",
      "managed_by_file_system": False, "coming_soon": False},
     {"key": "utility", "label": "Zaman & Yardımcı", "note": "Tarih/saat, tarih matematiği, birim & döviz çevrimi (anahtarsız)",
+     "managed_by_file_system": False, "coming_soon": False},
+    {"key": "database", "label": "Veritabanı & SQL", "note": "Veritabanları'ndan PostgreSQL bağla; salt-okunur sorgu + şema keşfi",
+     "managed_by_file_system": False, "coming_soon": False},
+    {"key": "github", "label": "GitHub", "note": "GitHub (PAT) bağla; repo/issue/kod arama + dosya okuma",
      "managed_by_file_system": False, "coming_soon": False},
 ]
 

@@ -44,6 +44,10 @@ async def _app_startup_state():
     register_notify_tools()
     from app.services.agent.tools.utility import register_utility_tools
     register_utility_tools()
+    from app.services.agent.tools.sql import register_sql_tools
+    register_sql_tools()
+    from app.services.agent.tools.github import register_github_tools
+    register_github_tools()
     redis = await get_redis_pool()
     init_hitl_engine(redis)
     try:

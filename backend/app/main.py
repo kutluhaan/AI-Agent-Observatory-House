@@ -80,6 +80,12 @@ async def lifespan(app: FastAPI):
     # loop it.7: Zaman & Yardımcı tool'ları
     from app.services.agent.tools.utility import register_utility_tools
     register_utility_tools()
+    # loop it.8: Veritabanı & SQL tool'ları (salt-okunur)
+    from app.services.agent.tools.sql import register_sql_tools
+    register_sql_tools()
+    # loop it.9: GitHub tool'ları
+    from app.services.agent.tools.github import register_github_tools
+    register_github_tools()
     logger.info("Agent built-in tools registered")
 
     # Faz 3: Dosya sistemi tool'larını kaydet
@@ -208,6 +214,12 @@ app.include_router(mcp_registry_router, prefix="/mcp-registry", tags=["mcp"])
 
 from app.api.v1.notification_channels import router as notification_channels_router
 app.include_router(notification_channels_router, prefix="/notification-channels", tags=["notifications"])
+
+from app.api.v1.db_connections import router as db_connections_router
+app.include_router(db_connections_router, prefix="/db-connections", tags=["database"])
+
+from app.api.v1.github_connections import router as github_connections_router
+app.include_router(github_connections_router, prefix="/github-connections", tags=["github"])
 
 from app.api.v1.teams import router as teams_router, team_runs_router
 app.include_router(teams_router, prefix="/teams", tags=["teams"])
