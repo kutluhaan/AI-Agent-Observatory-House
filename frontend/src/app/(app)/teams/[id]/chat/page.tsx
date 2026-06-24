@@ -6,10 +6,11 @@ import Link from "next/link";
 import {
   ArrowLeft, Send, Plus, MessageSquare, Trash2, Users, Settings2,
   ArrowRight, Wrench, StickyNote, ChevronDown, CheckCircle2, User as UserIcon,
+  BookOpen, Eye,
 } from "lucide-react";
 import {
   api, ApiError,
-  type Team, type TeamRun, type TeamRunDetail, type TeamRunMessage, type TeamConversation,
+  type Team, type TeamRun, type TeamRunDetail, type TeamRunMessage, type TeamConversation, type Agent,
 } from "@/lib/api";
 import { roleIcon, roleColor } from "@/lib/team-roles";
 import { subscribeTeamRuns } from "@/lib/ws";
@@ -18,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Markdown } from "@/components/ui/markdown";
+import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
 interface Turn {
@@ -25,6 +27,8 @@ interface Turn {
   input: string;
   detail: TeamRunDetail | null;
 }
+
+const topBtn = "flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200";
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -45,6 +49,8 @@ export default function TeamChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [showTeam, setShowTeam] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const refreshConversations = useCallback(() => {
@@ -53,6 +59,7 @@ export default function TeamChatPage() {
 
   useEffect(() => {
     api.get<Team>(`/teams/${id}`).then(setTeam).catch(() => setError("Ekip bulunamadı."));
+    api.get<Agent[]>("/agents").then(setAgents).catch(() => {});
     refreshConversations();
   }, [id, refreshConversations]);
 
@@ -186,12 +193,17 @@ export default function TeamChatPage() {
             <span className="hidden text-[11px] text-zinc-600 md:inline">{team?.members.map((m) => m.role).join(" · ")}</span>
           </div>
           {team && (
-            <Link
-              href={`/teams/${id}`}
-              className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
-            >
-              <Settings2 size={12} />Ekip & ayarlar
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href={`/teams/${id}/knowledge`} className={topBtn}>
+                <BookOpen size={12} />Knowledge Base
+              </Link>
+              <button type="button" onClick={() => setShowTeam(true)} className={topBtn}>
+                <Eye size={12} />Ekibi Tanı
+              </button>
+              <Link href={`/teams/${id}`} className={topBtn}>
+                <Settings2 size={12} />Düzenle
+              </Link>
+            </div>
           )}
         </div>
 
@@ -227,8 +239,58 @@ export default function TeamChatPage() {
           </form>
         </div>
       </div>
+
+      <TeamModal open={showTeam} onClose={() => setShowTeam(false)} team={team} agents={agents} />
     </div>
   );
+}
+
+// ── Ekibi Tanı modalı: üyeler + roller + her agent'ın tool'ları ──
+
+function TeamModal({ open, onClose, team, agents }: { open: boolean; onClose: () => void; team: Team | null; agents: Agent[] }) {
+  if (!open || !team) return null;
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  return (
+    <Modal open title={`Ekibi Tanı — ${team.name}`} onClose={onClose} className="max-w-xl">
+      <div className="flex flex-col gap-3">
+        {team.description && <p className="text-xs text-zinc-500">{team.description}</p>}
+        <p className="text-[11px] text-zinc-600">{team.members.length} üye · max {team.max_delegations} delege · {team.run_timeout_seconds}s üst süre</p>
+        <div className="flex max-h-[55vh] flex-col gap-2 overflow-y-auto">
+          {team.members.map((m) => {
+            const RI = roleIcon(m.role);
+            const a = m.agent_id ? byId.get(m.agent_id) : undefined;
+            const tools = a?.tool_names ?? [];
+            return (
+              <div key={m.id} className="rounded-lg border border-zinc-800/70 bg-zinc-900/40 p-3">
+                <div className="flex items-center gap-2">
+                  <RI size={16} className={cn("shrink-0", roleColor(m.role))} />
+                  <span className="text-sm font-medium text-zinc-200">{m.agent_name ?? "—"}</span>
+                  <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{m.role}</span>
+                  {a && <span className="ml-auto text-[10px] text-zinc-600">{a.provider} · {a.model}</span>}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {a?.file_system_enabled && <ToolTag label="dosya sistemi" />}
+                  {tools.length === 0 && !a?.file_system_enabled ? (
+                    <span className="text-[10px] text-zinc-600">tool yok</span>
+                  ) : tools.map((t) => <ToolTag key={t} label={t} />)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {team.shared_instructions && (
+          <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-2.5">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-600">Ekip promptu</p>
+            <p className="mt-1 text-xs text-zinc-400">{team.shared_instructions}</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ToolTag({ label }: { label: string }) {
+  return <span className="rounded bg-zinc-800/70 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">{label}</span>;
 }
 
 // ── Tur baloncuğu (kullanıcı + ekip yanıtı) ─────────────────

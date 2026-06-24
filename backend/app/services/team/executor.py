@@ -112,6 +112,17 @@ async def build_member_runner(
     if shared:
         parts.append(f"--- TEAM INSTRUCTIONS (tüm ekip) ---\n{shared}")
 
+    # B2: Ekip Knowledge Base — aktif öğeler her üyenin promptuna eklenir
+    from app.models.team_knowledge import TeamKnowledge
+    tk_rows = (await db.execute(
+        select(TeamKnowledge).where(TeamKnowledge.team_id == team_id, TeamKnowledge.is_active.is_(True))
+        .order_by(TeamKnowledge.created_at.asc())
+    )).scalars().all()
+    if tk_rows:
+        kb = "\n".join(f"- [{k.kind}] {k.name}: {k.content}" for k in tk_rows if k.content.strip())
+        if kb:
+            parts.append(f"--- EKİP BİLGİ TABANI (Knowledge Base) ---\n{kb}")
+
     # Bütçe-farkındalığı: ajanın gerçek limitlerini prompt'a dinamik enjekte et
     # (sayı statik değil; team ayarı değişince prompt da değişir). Ajan limiti BİLEREK çalışsın.
     max_deleg = (getattr(team, "max_delegations", 12) or 12) if team else 12

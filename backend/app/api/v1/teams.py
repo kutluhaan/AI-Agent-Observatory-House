@@ -25,6 +25,7 @@ from app.core.redis import get_redis
 from app.core.responses import AppError, NotFoundError, success
 from app.models.agent import Agent
 from app.models.team import Team, TeamMember, TeamRun, TeamRunMessage
+from app.models.team_knowledge import TEAM_KNOWLEDGE_KINDS, TeamKnowledge
 from app.schemas.teams import (
     CreateTeamRequest,
     RunTeamRequest,
@@ -248,6 +249,74 @@ async def delete_team_conversation(team_id: uuid.UUID, conversation_id: uuid.UUI
     )).scalars().all()
     for r in runs:
         await db.delete(r)
+    await db.commit()
+
+
+# ─── Ekip Knowledge Base (B2) ─────────────────────────────
+
+from pydantic import BaseModel  # noqa: E402
+from typing import Annotated as _Annotated  # noqa: E402
+from pydantic import Field as _Field  # noqa: E402
+
+
+class TeamKnowledgeIn(BaseModel):
+    kind: str = "rule"
+    name: _Annotated[str, _Field(min_length=1, max_length=200)]
+    content: str = ""
+    is_active: bool = True
+
+
+def _tk_dict(k: TeamKnowledge) -> dict:
+    return {"id": str(k.id), "kind": k.kind, "name": k.name, "content": k.content,
+            "is_active": k.is_active, "created_at": k.created_at.isoformat()}
+
+
+@router.get("/{team_id}/knowledge")
+async def list_team_knowledge(team_id: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("member"))):
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    rows = (await db.execute(
+        select(TeamKnowledge).where(TeamKnowledge.team_id == team_id, TeamKnowledge.organization_id == ctx.org_id)
+        .order_by(TeamKnowledge.created_at.asc())
+    )).scalars().all()
+    return success([_tk_dict(k) for k in rows])
+
+
+@router.post("/{team_id}/knowledge", status_code=201)
+async def create_team_knowledge(team_id: uuid.UUID, body: TeamKnowledgeIn, db=Depends(get_db), ctx: TenantContext = Depends(require_role("admin"))):
+    await _get_team_or_404(team_id, ctx.org_id, db)
+    if body.kind not in TEAM_KNOWLEDGE_KINDS:
+        raise AppError("KNOWLEDGE_KIND_INVALID", f"kind must be one of {TEAM_KNOWLEDGE_KINDS}", 422)
+    k = TeamKnowledge(id=uuid.uuid4(), team_id=team_id, organization_id=ctx.org_id,
+                      kind=body.kind, name=body.name, content=body.content, is_active=body.is_active)
+    db.add(k)
+    await db.commit()
+    await db.refresh(k)
+    return success(_tk_dict(k))
+
+
+async def _get_tk_or_404(team_id, kid, org_id, db) -> TeamKnowledge:
+    k = (await db.execute(select(TeamKnowledge).where(
+        TeamKnowledge.id == kid, TeamKnowledge.team_id == team_id, TeamKnowledge.organization_id == org_id))).scalar_one_or_none()
+    if k is None:
+        raise NotFoundError("KNOWLEDGE_NOT_FOUND", "Knowledge item not found.")
+    return k
+
+
+@router.patch("/{team_id}/knowledge/{kid}")
+async def update_team_knowledge(team_id: uuid.UUID, kid: uuid.UUID, body: TeamKnowledgeIn, db=Depends(get_db), ctx: TenantContext = Depends(require_role("admin"))):
+    k = await _get_tk_or_404(team_id, kid, ctx.org_id, db)
+    if body.kind not in TEAM_KNOWLEDGE_KINDS:
+        raise AppError("KNOWLEDGE_KIND_INVALID", f"kind must be one of {TEAM_KNOWLEDGE_KINDS}", 422)
+    k.kind, k.name, k.content, k.is_active = body.kind, body.name, body.content, body.is_active
+    await db.commit()
+    await db.refresh(k)
+    return success(_tk_dict(k))
+
+
+@router.delete("/{team_id}/knowledge/{kid}", status_code=204)
+async def delete_team_knowledge(team_id: uuid.UUID, kid: uuid.UUID, db=Depends(get_db), ctx: TenantContext = Depends(require_role("admin"))):
+    k = await _get_tk_or_404(team_id, kid, ctx.org_id, db)
+    await db.delete(k)
     await db.commit()
 
 

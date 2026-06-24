@@ -27,6 +27,7 @@ from app.models.notification import NotificationChannel
 from app.models.agent_prompt_version import AgentPromptVersion
 from app.models.db_connection import DbConnection
 from app.models.github_connection import GithubConnection
+from app.models.team_knowledge import TeamKnowledge
 
 __all__ = [
     "User",
@@ -58,4 +59,5 @@ __all__ = [
     "AgentPromptVersion",
     "DbConnection",
     "GithubConnection",
+    "TeamKnowledge",
 ]

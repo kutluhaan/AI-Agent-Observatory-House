@@ -57,7 +57,7 @@ export default function TeamsPage() {
           {teams.map((t) => (
             <div
               key={t.id}
-              onClick={() => router.push(`/teams/${t.id}`)}
+              onClick={() => router.push(`/teams/${t.id}/chat`)}
               className="group relative flex cursor-pointer flex-col gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70"
             >
               <div className="flex items-start justify-between">
