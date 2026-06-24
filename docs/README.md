@@ -34,7 +34,7 @@ belgelenir.
 - [Dataset'ten suite](test-suite/dataset-suites.md) — CSV/JSONL yükle, otomatik case (B2/#5)
 
 ### Ajan & Araçlar
-- [Tool kategorileri](features/tool-categories.md) — file/web/finance/operation/self; kategori bazlı seçim
+- [Tool kategorileri](features/tool-categories.md) — kategori bazlı seçim (artık 10 kategori; tam liste: [genel bakış](features/post-sprint-overview.md))
 - [Custom model (OpenAI-uyumlu)](features/custom-model-provider.md) — self-hosted endpoint + Providers ayar sayfası
 - [External agent (HTTP invoke)](features/http-agent.md) — dış agent'ı OpenAI-uyumlu HTTP ile çağır (F7.1)
 - [MCP server entegrasyonu](features/mcp-integration.md) — dış MCP tool'larını agent'a bağla (F7.2)
@@ -52,6 +52,7 @@ belgelenir.
 - [Mesajlaşma & Bildirim](features/notifications.md) — şifreli webhook kanalı + `send_notification`
 - [Zaman & Yardımcı](features/utility-tools.md) — datetime, tarih matematiği, birim & döviz çevrimi
 - [Veritabanı & SQL](features/sql-tools.md) — şifreli PostgreSQL bağlantısı + salt-okunur sorgu
+- [GitHub](features/github-tools.md) — şifreli PAT + repo/issue/kod arama + dosya okuma
 - [Prompt versiyonlama](features/prompt-versioning-plan.md) — otomatik snapshot + rollback + trace bağı
 
 > Önceki fazların (A/B/C: trajectory, deterministik assertion'lar, maliyet,

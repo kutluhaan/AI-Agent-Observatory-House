@@ -153,4 +153,5 @@ def register_google_tools() -> None:
         if r.status_code != 200:
             return f"[drive error: read failed ({r.status_code}) {r.text[:160]}]"
         text = r.text
-        return f"# {name}\n\n{text[:max(500, int(max_chars or 6000))]}"
+        n = min(max(500, int(max_chars or 6000)), 50_000)  # üst limit: context'i şişirme
+        return f"# {name}\n\n{text[:n]}"

@@ -4,7 +4,7 @@ Orijinal yol haritası **F1–F8** ile bitti. Bu doküman, ondan sonra (kullanı
 istekleri + `/loop` oturumları) eklenen **her şeyi** tek yerde özetler. Her madde
 tam entegredir (backend + DB/migration + UI + test + doküman).
 
-> Migration aralığı: **0014 → 0027**. Test sayısı: **553 geçer** (oturum sonu).
+> Migration aralığı: **0014 → 0028**. Test sayısı: **559 geçer**. Tool kataloğu: **10 kategori**.
 
 ---
 
@@ -27,6 +27,10 @@ Başlangıçta `file/web/self/finance(boş)/operation(boş)`. Eklenen/doldurulan
 | **messaging** | send_notification (generic webhook) | org Bildirim Kanalı (şifreli) | [notifications](notifications.md) |
 | **utility** | get_current_datetime, date_calculate, convert_units, convert_currency | anahtarsız | [utility-tools](utility-tools.md) |
 | **database** | sql_query, sql_schema, sql_sample (SALT-OKUNUR) | org DB bağlantısı (şifreli) | [sql-tools](sql-tools.md) |
+| **github** | github_search, github_repo_info, github_issues, github_read_file | org GitHub PAT (şifreli) | [github-tools](github-tools.md) |
+
+**web (genişletildi, it.10):** mevcut `web` kategorisine **`read_urls`** (paralel çoklu-URL
+okuma — enrichment) + **`read_pdf`** (PDF URL'inden metin, `pypdf`) eklendi.
 
 **Tool ekleme reçetesi:** backend tool dosyası + `main.py` lifespan kaydı +
 `tool_categories.py` (CATEGORY_OF + CATEGORIES) + frontend ikon (`agent-form.tsx`).
@@ -53,6 +57,7 @@ Başlangıçta `file/web/self/finance(boş)/operation(boş)`. Eklenen/doldurulan
 | **MCP Registry (D/#2)** | resmi MCP Registry'de ara + tek tıkla sunucu ekle | — | [mcp-integration](mcp-integration.md) |
 | **Bildirim Kanalları** | org webhook (şifreli) + `/test` | 0025 | [notifications](notifications.md) |
 | **Veritabanı bağlantıları** | org PostgreSQL DSN (şifreli) + salt-okunur sorgu | 0027 | [sql-tools](sql-tools.md) |
+| **GitHub bağlantıları** | org GitHub PAT (şifreli) + repo/issue/kod okuma | 0028 | [github-tools](github-tools.md) |
 | **Prompt versiyonlama** | agent config'i otomatik snapshot + rollback UI + trace'e prompt_version | 0026 | [prompt-versioning-plan](prompt-versioning-plan.md) |
 
 ## 5. Güvenlik desenleri (tutarlı)
@@ -66,8 +71,8 @@ Başlangıçta `file/web/self/finance(boş)/operation(boş)`. Eklenen/doldurulan
 ## 6. Süreç notları
 
 - **/loop** oturumu: her 10 dk'da sistemi oku → kategori/özellik ekle → kullanıcıya
-  multi-select sorular → uygula → dokümante. 8 iterasyon (finance, trading, Google,
-  messaging, prompt-versioning tasarım, prompt-versioning kurulum, utility, SQL).
+  multi-select sorular → uygula → dokümante. 9 iterasyon (finance, trading, Google,
+  messaging, prompt-versioning tasarım + kurulum, utility, SQL, GitHub).
 - **Bug-hunt:** Explore alt-ajanları tekrar tekrar yanlış pozitif üretti (idempotent
   `tracer.end`, kasıtlı best-effort `except`, async `await db.delete` doğrudur). Kod tabanı
   defansif yazıldığından recurring bug-tarama kaldırıldı; doğrulanmış tek gerçek düzeltme:

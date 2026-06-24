@@ -37,6 +37,7 @@ logger = structlog.get_logger()
 _NOTES_TTL = 86_400          # 24 saat
 _READ_TIMEOUT = 15.0         # saniye
 _MAX_HTML_BYTES = 2_000_000  # 2 MB — büyük sayfaları köreltmemek için cap
+_MAX_PDF_BYTES = 10_000_000  # 10 MB — PDF indirme tavanı (read_pdf)
 
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; ObservatoryResearchBot/1.0; "
@@ -134,6 +135,45 @@ def register_research_tools() -> None:
         max_chars: int = 4000,
     ) -> str:
         return await _read_url(ctx, url, max_chars)
+
+    # ── read_urls (paralel web enrichment) ────────────────
+
+    @ToolRegistry.register(
+        name="read_urls",
+        description=(
+            "Fetch MULTIPLE URLs in parallel and return each one's cleaned text (capped per URL). "
+            "Use to enrich/compare several sources at once instead of many separate read_url calls."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "urls": {"type": "array", "items": {"type": "string"}, "description": "URL list (max 8)."},
+                "max_chars_each": {"type": "integer", "description": "Max chars per URL. Default 2000.", "default": 2000},
+            },
+            "required": ["urls"],
+        },
+    )
+    async def read_urls(ctx: ToolContext, urls: list[str], max_chars_each: int = 2000) -> str:
+        return await _read_urls(ctx, urls, max_chars_each)
+
+    # ── read_pdf ──────────────────────────────────────────
+
+    @ToolRegistry.register(
+        name="read_pdf",
+        description=(
+            "Fetch a PDF from a URL and extract its text (first pages). Use for PDF reports, papers, datasheets."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "PDF URL (must start with http:// or https://)."},
+                "max_chars": {"type": "integer", "description": "Max characters. Default 6000.", "default": 6000},
+            },
+            "required": ["url"],
+        },
+    )
+    async def read_pdf(ctx: ToolContext, url: str, max_chars: int = 6000) -> str:
+        return await _read_pdf(ctx, url, max_chars)
 
     # ── summarize ─────────────────────────────────────────
 
@@ -330,6 +370,44 @@ async def _read_url(ctx: ToolContext, url: str, max_chars: int) -> str:
         text = cut + "\n[...truncated]"
 
     return f"Content from {url}:\n\n{text}"
+
+
+async def _read_urls(ctx: ToolContext, urls: list[str], max_chars_each: int = 2000) -> str:
+    """Birden çok URL'i paralel oku (read_url üstüne). En fazla 8 URL."""
+    import asyncio
+    clean = [u for u in (urls or []) if isinstance(u, str) and u.strip()][:8]
+    if not clean:
+        return "[read_urls error: geçerli URL yok]"
+    cap = max(200, min(int(max_chars_each or 2000), 8000))
+    results = await asyncio.gather(*[_read_url(ctx, u, cap) for u in clean], return_exceptions=True)
+    parts = []
+    for u, r in zip(clean, results):
+        parts.append(f"### {u}\n{r if isinstance(r, str) else f'[error: {r}]'}")
+    return "\n\n".join(parts)
+
+
+async def _read_pdf(ctx: ToolContext, url: str, max_chars: int = 6000) -> str:
+    """PDF URL'inden metin çıkar (ilk sayfalar). pypdf ile."""
+    if not url.startswith(("http://", "https://")):
+        return "[read_pdf error: url http:// veya https:// ile başlamalı]"
+    try:
+        async with httpx.AsyncClient(timeout=_READ_TIMEOUT, follow_redirects=True,
+                                     headers={"User-Agent": _USER_AGENT}) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            content = r.content[:_MAX_PDF_BYTES]
+    except Exception as exc:  # noqa: BLE001
+        return f"[read_pdf error: indirilemedi: {exc}]"
+    try:
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(content))
+        text = "\n".join((page.extract_text() or "") for page in reader.pages[:50]).strip()
+    except Exception as exc:  # noqa: BLE001
+        return f"[read_pdf error: PDF işlenemedi: {exc}]"
+    if not text:
+        return "[read_pdf: metin çıkarılamadı (taranmış/görüntü PDF olabilir)]"
+    return text[:min(max(500, int(max_chars or 6000)), 50_000)]
 
 
 def _extractive_summarize(text: str, focus: str, max_sentences: int) -> str:

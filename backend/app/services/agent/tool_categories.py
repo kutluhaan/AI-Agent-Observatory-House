@@ -34,6 +34,8 @@ INTERNAL_TOOLS: set[str] = {
 CATEGORY_OF: dict[str, str] = {
     "web_search": "web",
     "read_url": "web",
+    "read_urls": "web",   # loop it.10: paralel web enrichment
+    "read_pdf": "web",    # loop it.10: PDF metin çıkarma
     "think": "self",
     "write_todos": "self",
     "ask_user": "self",

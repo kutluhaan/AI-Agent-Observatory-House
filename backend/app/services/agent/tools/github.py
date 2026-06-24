@@ -174,4 +174,5 @@ def register_github_tools() -> None:
             text = base64.b64decode(d["content"]).decode("utf-8", "replace")
         except Exception as exc:  # noqa: BLE001
             return f"[github error: decode failed: {exc}]"
-        return f"# {repo}/{path}\n\n{text[:max(500, int(max_chars or 6000))]}"
+        n = min(max(500, int(max_chars or 6000)), 50_000)  # üst limit: context'i şişirme
+        return f"# {repo}/{path}\n\n{text[:n]}"
