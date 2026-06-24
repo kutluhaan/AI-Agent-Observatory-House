@@ -10,6 +10,7 @@ import {
   TrendingUp,
   CalendarClock,
   Bell,
+  Clock,
   ChevronDown,
 } from "lucide-react";
 import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool, type CustomTool } from "@/lib/api";
@@ -46,6 +47,7 @@ const CATEGORY_ICONS: Record<string, typeof Globe> = {
   finance: TrendingUp,
   operation: CalendarClock,
   messaging: Bell,
+  utility: Clock,
 };
 
 export interface AgentFormValues {

@@ -22,6 +22,8 @@ def _setup():
     register_google_tools()
     from app.services.agent.tools.notify import register_notify_tools
     register_notify_tools()
+    from app.services.agent.tools.utility import register_utility_tools
+    register_utility_tools()
 
 
 def test_category_of():
@@ -37,7 +39,7 @@ def test_category_of():
 def test_build_categories_order_and_labels():
     _setup()
     cats = build_categories()
-    assert [c["key"] for c in cats] == ["file", "web", "self", "email", "finance", "operation", "messaging"]
+    assert [c["key"] for c in cats] == ["file", "web", "self", "email", "finance", "operation", "messaging", "utility"]
 
 
 def test_web_and_self_have_expected_tools():
@@ -94,6 +96,15 @@ def test_messaging_category_has_notify():
     names = {t["name"] for t in cats["messaging"]["tools"]}
     assert "send_notification" in names
     assert category_of("send_notification") == "messaging"
+
+
+def test_utility_category_has_tools():
+    """loop it.7: utility kategorisi zaman/çevrim tool'larıyla dolu."""
+    _setup()
+    cats = {c["key"]: c for c in build_categories()}
+    names = {t["name"] for t in cats["utility"]["tools"]}
+    assert {"get_current_datetime", "date_calculate", "convert_units", "convert_currency"} <= names
+    assert category_of("convert_units") == "utility"
 
 
 def test_skill_tools_not_in_selectable_categories():

@@ -77,6 +77,9 @@ async def lifespan(app: FastAPI):
     # loop it.4: Bildirim tool'u (generic webhook)
     from app.services.agent.tools.notify import register_notify_tools
     register_notify_tools()
+    # loop it.7: Zaman & Yardımcı tool'ları
+    from app.services.agent.tools.utility import register_utility_tools
+    register_utility_tools()
     logger.info("Agent built-in tools registered")
 
     # Faz 3: Dosya sistemi tool'larını kaydet

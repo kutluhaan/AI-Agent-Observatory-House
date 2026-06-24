@@ -55,6 +55,11 @@ CATEGORY_OF: dict[str, str] = {
     "drive_read_file": "operation",
     # loop it.4: Mesajlaşma & Bildirim (org bildirim kanalı — generic webhook)
     "send_notification": "messaging",
+    # loop it.7: Zaman & Yardımcı (anahtarsız/sıfır-config)
+    "get_current_datetime": "utility",
+    "date_calculate": "utility",
+    "convert_units": "utility",
+    "convert_currency": "utility",
 }
 
 # Sıralı kategori kataloğu (UI gösterim sırası + etiketler)
@@ -72,6 +77,8 @@ CATEGORIES: list[dict] = [
     {"key": "operation", "label": "Takvim & Drive (Google)", "note": "Bağlantılar'dan Google bağla; takvim etkinlikleri + Drive dosyaları",
      "managed_by_file_system": False, "coming_soon": False},
     {"key": "messaging", "label": "Mesajlaşma & Bildirim", "note": "Bildirim Kanalları'ndan webhook ekle; agent mesaj/uyarı gönderir",
+     "managed_by_file_system": False, "coming_soon": False},
+    {"key": "utility", "label": "Zaman & Yardımcı", "note": "Tarih/saat, tarih matematiği, birim & döviz çevrimi (anahtarsız)",
      "managed_by_file_system": False, "coming_soon": False},
 ]
 

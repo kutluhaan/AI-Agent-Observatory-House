@@ -42,6 +42,8 @@ async def _app_startup_state():
     register_google_tools()
     from app.services.agent.tools.notify import register_notify_tools
     register_notify_tools()
+    from app.services.agent.tools.utility import register_utility_tools
+    register_utility_tools()
     redis = await get_redis_pool()
     init_hitl_engine(redis)
     try:
