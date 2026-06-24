@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Plug, Users, Link2, Wrench } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Plug, Users, Link2, Wrench, Bell } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth";
@@ -18,6 +18,7 @@ const NAV = [
   { label: "Sağlayıcılar", href: "/providers", icon: Server },
   { label: "MCP", href: "/mcp-servers", icon: Plug },
   { label: "Özel Araçlar", href: "/custom-tools", icon: Wrench },
+  { label: "Bildirimler", href: "/notification-channels", icon: Bell },
   { label: "Bağlantılar", href: "/connections", icon: Link2 },
 ];
 

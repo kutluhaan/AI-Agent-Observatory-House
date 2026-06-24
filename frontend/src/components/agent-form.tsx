@@ -8,7 +8,8 @@ import {
   Globe,
   Brain,
   TrendingUp,
-  Briefcase,
+  CalendarClock,
+  Bell,
   ChevronDown,
 } from "lucide-react";
 import { api, ApiError, type ToolCategory, type McpServer, type McpToolInfo, type AgentMcpTool, type CustomTool } from "@/lib/api";
@@ -43,7 +44,8 @@ const CATEGORY_ICONS: Record<string, typeof Globe> = {
   web: Globe,
   self: Brain,
   finance: TrendingUp,
-  operation: Briefcase,
+  operation: CalendarClock,
+  messaging: Bell,
 };
 
 export interface AgentFormValues {

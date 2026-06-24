@@ -23,6 +23,7 @@ from app.models.mcp import McpServer
 from app.models.team import Team, TeamMember, TeamRun, TeamRunMessage
 from app.models.connection import ServiceConnection
 from app.models.custom_tool import CustomTool
+from app.models.notification import NotificationChannel
 
 __all__ = [
     "User",
@@ -50,4 +51,5 @@ __all__ = [
     "TeamRunMessage",
     "ServiceConnection",
     "CustomTool",
+    "NotificationChannel",
 ]

@@ -18,12 +18,17 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-# Gmail: oku + gönder (restricted scope; testing modunda doğrulama gerekmez)
+# Google izinleri (testing modunda doğrulama gerekmez, ≤100 kullanıcı):
+#   Gmail oku+gönder (G1) + Takvim etkinlikleri + Drive okuma (D/#13).
+# Bu listeyi değiştirince kullanıcılar hesabı YENİDEN bağlamalı (yeni izin onayı).
 GMAIL_SCOPES = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
+    # D/#13 — Takvim & Drive
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 

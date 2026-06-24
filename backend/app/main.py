@@ -71,6 +71,12 @@ async def lifespan(app: FastAPI):
     # G1: Gmail tool'ları (search / read / send)
     from app.services.agent.tools.gmail import register_gmail_tools
     register_gmail_tools()
+    # D/#13: Google Takvim & Drive tool'ları
+    from app.services.agent.tools.google_workspace import register_google_tools
+    register_google_tools()
+    # loop it.4: Bildirim tool'u (generic webhook)
+    from app.services.agent.tools.notify import register_notify_tools
+    register_notify_tools()
     logger.info("Agent built-in tools registered")
 
     # Faz 3: Dosya sistemi tool'larını kaydet
@@ -91,6 +97,11 @@ async def lifespan(app: FastAPI):
     from app.services.agent.tools.research import register_research_tools
     register_research_tools()
     logger.info("Research tools registered")
+
+    # D/#2: Finans tool'ları (kripto/hisse fiyat+geçmiş, indikatörler, haber)
+    from app.services.agent.tools.finance import register_finance_tools
+    register_finance_tools()
+    logger.info("Finance tools registered")
 
     yield
 
@@ -191,6 +202,9 @@ app.include_router(mcp_servers_router, prefix="/mcp-servers", tags=["mcp"])
 
 from app.api.v1.mcp_registry import router as mcp_registry_router
 app.include_router(mcp_registry_router, prefix="/mcp-registry", tags=["mcp"])
+
+from app.api.v1.notification_channels import router as notification_channels_router
+app.include_router(notification_channels_router, prefix="/notification-channels", tags=["notifications"])
 
 from app.api.v1.teams import router as teams_router, team_runs_router
 app.include_router(teams_router, prefix="/teams", tags=["teams"])

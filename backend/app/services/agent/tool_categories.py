@@ -41,6 +41,20 @@ CATEGORY_OF: dict[str, str] = {
     "gmail_search": "email",
     "gmail_read": "email",
     "gmail_send": "email",
+    # D/#2: Finans (anahtarsız public kaynaklar — kripto/hisse + indikatör + haber)
+    "get_crypto_price": "finance",
+    "get_crypto_ohlc": "finance",
+    "get_stock_quote": "finance",
+    "get_stock_history": "finance",
+    "get_technical_indicators": "finance",
+    "get_market_news": "finance",
+    # D/#13: Google Takvim & Drive (bağlı Google hesabıyla)
+    "calendar_list_events": "operation",
+    "calendar_create_event": "operation",
+    "drive_search": "operation",
+    "drive_read_file": "operation",
+    # loop it.4: Mesajlaşma & Bildirim (org bildirim kanalı — generic webhook)
+    "send_notification": "messaging",
 }
 
 # Sıralı kategori kataloğu (UI gösterim sırası + etiketler)
@@ -53,10 +67,12 @@ CATEGORIES: list[dict] = [
      "managed_by_file_system": False, "coming_soon": False},
     {"key": "email", "label": "E-posta (Gmail)", "note": "Bağlantılar'dan Gmail bağla; oku/ara/gönder",
      "managed_by_file_system": False, "coming_soon": False},
-    {"key": "finance", "label": "Finans", "note": "Yakında",
-     "managed_by_file_system": False, "coming_soon": True},
-    {"key": "operation", "label": "Operasyon", "note": "Takvim, dökümanlar — yakında",
-     "managed_by_file_system": False, "coming_soon": True},
+    {"key": "finance", "label": "Finans", "note": "Kripto/hisse fiyat & geçmiş, teknik indikatörler, piyasa haberi",
+     "managed_by_file_system": False, "coming_soon": False},
+    {"key": "operation", "label": "Takvim & Drive (Google)", "note": "Bağlantılar'dan Google bağla; takvim etkinlikleri + Drive dosyaları",
+     "managed_by_file_system": False, "coming_soon": False},
+    {"key": "messaging", "label": "Mesajlaşma & Bildirim", "note": "Bildirim Kanalları'ndan webhook ekle; agent mesaj/uyarı gönderir",
+     "managed_by_file_system": False, "coming_soon": False},
 ]
 
 

@@ -10,8 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Alert } from "@/components/ui/alert";
-
-const cn = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
+import { cn } from "@/lib/utils";
 
 const EXAMPLE_YAML = `name: research-suite
 description: Checks for a file-system research agent
