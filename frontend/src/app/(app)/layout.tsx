@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Plug, Users, Link2, Wrench, Bell, Database, Github } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth";
@@ -15,12 +15,7 @@ const NAV = [
   { label: "Traces", href: "/traces", icon: Activity },
   { label: "Test Suites", href: "/test-suites", icon: TestTube2 },
   { label: "Ekipler", href: "/teams", icon: Users },
-  { label: "Sağlayıcılar", href: "/providers", icon: Server },
-  { label: "MCP", href: "/mcp-servers", icon: Plug },
-  { label: "Özel Araçlar", href: "/custom-tools", icon: Wrench },
-  { label: "Bildirimler", href: "/notification-channels", icon: Bell },
-  { label: "Veritabanları", href: "/db-connections", icon: Database },
-  { label: "GitHub", href: "/github-connections", icon: Github },
+  { label: "Modeller", href: "/providers", icon: Server },
   { label: "Bağlantılar", href: "/connections", icon: Link2 },
 ];
 
@@ -108,15 +103,6 @@ function TopBar() {
             <Plus size={12} />
             Create workspace
           </button>
-        )}
-        {user?.org_id && (
-          <Link
-            href="/providers"
-            title="Model sağlayıcıları"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
-          >
-            <Server size={15} />
-          </Link>
         )}
         {user && (
           <span className="ml-1 hidden text-xs text-zinc-600 sm:inline">{user.email}</span>
