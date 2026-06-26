@@ -87,6 +87,20 @@ async def run_case(
     # F4.3: A/B — run'a system_prompt_override varsa agent'ınkini geçici ezer (kalıcı değil)
     system_prompt = getattr(run, "system_prompt_override", None) or agent_row.system_prompt
 
+    # Skill'leri dahil et — normal chat ile aynı davranış
+    from app.services.agent import knowledge_store
+    from app.services.agent.tools.skills import SKILL_TOOL_NAMES
+    tool_names = list(agent_row.tool_names or [])
+    always_on = await knowledge_store.load_always_on(db, agent_row.id)
+    if always_on:
+        system_prompt = f"{system_prompt}\n\n{always_on}"
+    if await knowledge_store.has_skills(db, agent_row.id):
+        tool_names += SKILL_TOOL_NAMES
+        system_prompt += (
+            "\n\nYou have skills available. Call list_skills to discover them and "
+            "read_skill to read one before a task it covers."
+        )
+
     config = AgentConfig(
         agent_id=agent_row.id,
         org_id=run.organization_id,
@@ -98,7 +112,7 @@ async def run_case(
         max_tokens=agent_row.max_tokens,
         max_steps=agent_row.max_steps,
         timeout_seconds=agent_row.timeout_seconds,
-        tool_names=agent_row.tool_names or [],
+        tool_names=tool_names,
         hitl_tool_names=[],  # Test sırasında HITL devre dışı
     )
 
