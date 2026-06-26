@@ -475,7 +475,7 @@ export default function ChatPage() {
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+          <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
             {messages.length === 0 && (
               <div className="py-20 text-center">
                 <Bot size={28} className="mx-auto mb-3 text-zinc-700" />
@@ -493,7 +493,7 @@ export default function ChatPage() {
         </div>
 
         <div className="border-t border-zinc-900 px-6 py-4">
-          <form onSubmit={handleSend} className="mx-auto flex w-full max-w-3xl items-end gap-2">
+          <form onSubmit={handleSend} className="mx-auto flex w-full max-w-4xl items-end gap-2">
             <div className="flex-1">
               <Textarea
                 value={input}
@@ -540,15 +540,18 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
   msg.segments.forEach((s, i) => {
     if (s.kind === "tool" && s.tool.name === "write_todos") lastTodosIdx = i;
   });
+  const hasRunningTool = msg.running && msg.segments.some((s) => s.kind === "tool" && s.tool.status === "running");
+  const hasText = msg.segments.some((s) => s.kind === "text" && s.text);
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", isUser ? "bg-zinc-800" : "bg-indigo-500/10")}>
         {isUser ? <UserIcon size={14} className="text-zinc-400" /> : <Bot size={14} className="text-indigo-400" />}
       </div>
-      <div className={cn("flex max-w-[85%] flex-col gap-2", isUser && "items-end")}>
+      <div className={cn("flex max-w-[90%] flex-col gap-2", isUser && "items-end")}>
         {msg.segments.map((seg, i) => {
           if (seg.kind === "text") {
             if (!seg.text) return null;
+            const isLast = i === msg.segments.length - 1;
             return (
               <div
                 key={i}
@@ -560,6 +563,9 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
                 )}
               >
                 {isUser ? seg.text : <Markdown>{seg.text}</Markdown>}
+                {msg.running && isLast && (
+                  <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-indigo-400 align-middle" />
+                )}
               </div>
             );
           }
@@ -574,10 +580,16 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
           }
           return <ToolCard key={i} tool={seg.tool} />;
         })}
-        {msg.running && msg.segments.every((s) => s.kind !== "text" || !s.text) && (
+        {msg.running && !hasText && !hasRunningTool && (
           <div className="flex items-center gap-2 px-1 text-xs text-zinc-600">
             <Spinner className="h-3 w-3" />
             düşünüyor…
+          </div>
+        )}
+        {msg.running && hasRunningTool && !hasText && (
+          <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
+            <Spinner className="h-3 w-3" />
+            araç çalışıyor…
           </div>
         )}
         {msg.error && <ErrorBlock code={msg.errorCode} message={msg.error} />}

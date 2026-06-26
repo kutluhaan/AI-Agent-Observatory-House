@@ -74,18 +74,21 @@ export default function TeamChatPage() {
   }, []);
 
   // Canlı: WS ping → ilgili turu yenile
+  // turns ref'e alındı — WS subscription'ı turns değiştikçe yeniden açmaktan kaçın
+  const turnsRef = useRef(turns);
+  useEffect(() => { turnsRef.current = turns; }, [turns]);
   useEffect(() => {
     const unsub = subscribeTeamRuns((ev) => {
-      if (turns.some((t) => t.runId === ev.run_id)) refreshRun(ev.run_id);
+      if (turnsRef.current.some((t) => t.runId === ev.run_id)) void refreshRun(ev.run_id);
     });
     return unsub;
-  }, [turns, refreshRun]);
+  }, [refreshRun]); // turns bağımlılığı kaldırıldı — WS artık reconnect etmez
 
-  // Çalışan tur için yedek poll
+  // Çalışan tur için yedek poll (2s — daha sık)
   useEffect(() => {
     const active = turns.find((t) => t.runId && t.detail && (t.detail.run.status === "running" || t.detail.run.status === "pending"));
     if (!active?.runId) return;
-    const intv = setInterval(() => refreshRun(active.runId!), 3500);
+    const intv = setInterval(() => void refreshRun(active.runId!), 2000);
     return () => clearInterval(intv);
   }, [turns, refreshRun]);
 

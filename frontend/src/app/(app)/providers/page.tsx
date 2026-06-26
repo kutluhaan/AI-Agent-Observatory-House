@@ -23,7 +23,15 @@ const LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   gemini: "Google Gemini",
   ollama: "Ollama (yerel)",
-  custom: "Custom — OpenAI-uyumlu (self-hosted)",
+  custom: "Custom (OpenAI-uyumlu)",
+};
+
+const DESCRIPTIONS: Record<string, string> = {
+  openai: "GPT-4o, GPT-4o mini, o1, o3-mini",
+  anthropic: "Claude Opus, Sonnet, Haiku",
+  gemini: "Gemini 2.5 Pro, Flash, Nano",
+  ollama: "Llama, Mistral, Qwen — local GPU/CPU",
+  custom: "vLLM, LM Studio, LocalAI, Azure OpenAI — herhangi OpenAI-uyumlu endpoint",
 };
 
 // base_url alanı olanlar
@@ -153,19 +161,24 @@ function ProviderCard({
           : "border-zinc-800/80 bg-zinc-900/40",
       )}
     >
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-sm font-medium text-zinc-200">{LABELS[entry.provider] ?? entry.provider}</span>
-        {entry.is_configured ? (
-          <Badge variant="green">
-            <CheckCircle2 size={10} />
-            yapılandırıldı
-          </Badge>
-        ) : (
-          <Badge variant="zinc">yapılandırılmadı</Badge>
-        )}
-        {entry.base_url && (
-          <span className="ml-auto truncate font-mono text-[11px] text-zinc-600">{entry.base_url}</span>
-        )}
+      <div className="mb-3 flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-zinc-200">{LABELS[entry.provider] ?? entry.provider}</span>
+            {entry.is_configured ? (
+              <Badge variant="green">
+                <CheckCircle2 size={10} />
+                yapılandırıldı
+              </Badge>
+            ) : (
+              <Badge variant="zinc">yapılandırılmadı</Badge>
+            )}
+          </div>
+          <p className="mt-0.5 text-[11px] text-zinc-600">{DESCRIPTIONS[entry.provider]}</p>
+          {entry.base_url && (
+            <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-700">{entry.base_url}</p>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

@@ -63,7 +63,7 @@ class Agent(Base):
     max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     max_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
-    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
     # loop it.6: aktif prompt sürüm no (agent_prompt_versions ile)
     prompt_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 

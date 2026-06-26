@@ -179,7 +179,14 @@ function TimelineRow({ ev, last }: { ev: TraceEvent; last: boolean }) {
           className="flex w-full items-center gap-2 text-left"
           disabled={!hasPayload}
         >
-          <span className="font-mono text-sm text-zinc-300">{ev.type}</span>
+          <span className="font-mono text-sm text-zinc-300">
+            {ev.type}
+            {(ev.type === "tool_call_start" || ev.type === "tool_call_end") && typeof ev.payload.name === "string" && (
+              <span className="ml-1.5 font-sans text-xs font-normal text-amber-400">
+                {ev.payload.name}
+              </span>
+            )}
+          </span>
           <span className="text-[11px] text-zinc-600">{timeOf(ev.timestamp)}</span>
         </button>
         {open && hasPayload && (
