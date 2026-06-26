@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BookOpen, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -300,6 +300,15 @@ cases:
 
 export function GuideDrawer() {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const body = document.body;
+    body.style.transition = "padding-right 200ms ease";
+    body.style.paddingRight = open ? "480px" : "0px";
+    return () => {
+      body.style.paddingRight = "0px";
+    };
+  }, [open]);
 
   return (
     <>
