@@ -2,25 +2,29 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Link2, Mail, Database, Wrench, Github, Bell } from "lucide-react";
+import { Link2, Mail, Calendar, HardDrive, Database, Wrench, Github, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
-import { GoogleSection } from "@/components/connections/google-section";
+import { GoogleServiceSection } from "@/components/connections/google-service-section";
 import DbConnectionsPage from "@/app/(app)/db-connections/page";
 import McpServersPage from "@/app/(app)/mcp-servers/page";
 import CustomToolsPage from "@/app/(app)/custom-tools/page";
 import GithubConnectionsPage from "@/app/(app)/github-connections/page";
 import NotificationChannelsPage from "@/app/(app)/notification-channels/page";
 
-type CatKey = "google" | "database" | "tools" | "github" | "notify";
+type CatKey = "gmail" | "gcalendar" | "gdrive" | "database" | "tools" | "github" | "notify";
 
 const CATS: { key: CatKey; label: string; icon: typeof Mail; desc: string }[] = [
-  { key: "google", label: "Google", icon: Mail, desc: "Gmail · Takvim · Drive hesabını bağla (OAuth). Agent senin adına okur/yazar." },
+  { key: "gmail", label: "Gmail", icon: Mail, desc: "E-posta oku, ara ve gönder. Agent senin adına çalışır." },
+  { key: "gcalendar", label: "Google Takvim", icon: Calendar, desc: "Etkinlik listele ve oluştur." },
+  { key: "gdrive", label: "Google Drive", icon: HardDrive, desc: "Dosya ara ve içeriklerini oku." },
   { key: "database", label: "Veritabanı", icon: Database, desc: "PostgreSQL bağlantısı (şifreli DSN). Agent SALT-OKUNUR sorgu çalıştırır." },
   { key: "tools", label: "Araç Bağlantıları", icon: Wrench, desc: "Dış araçlar: MCP sunucuları + kendi özel HTTP endpoint'lerin." },
   { key: "github", label: "GitHub", icon: Github, desc: "GitHub PAT (şifreli). Repo/issue/kod arama + dosya okuma." },
   { key: "notify", label: "Bildirimler", icon: Bell, desc: "Webhook kanalı (Slack/Discord/Teams). Agent mesaj/uyarı gönderir." },
 ];
+
+const GOOGLE_KEYS: CatKey[] = ["gmail", "gcalendar", "gdrive"];
 
 export default function ConnectionsPage() {
   return (
@@ -32,9 +36,9 @@ export default function ConnectionsPage() {
 
 function ConnectionsHub() {
   const params = useSearchParams();
-  // OAuth callback → google sekmesi; ?tab= varsa onu aç
-  const initial = (params.get("google") ? "google" : (params.get("tab") as CatKey)) || "google";
-  const [tab, setTab] = useState<CatKey>(CATS.some((c) => c.key === initial) ? initial : "google");
+  // OAuth callback → gmail sekmesi; ?tab= varsa onu aç
+  const initial = (params.get("google") ? "gmail" : (params.get("tab") as CatKey)) || "gmail";
+  const [tab, setTab] = useState<CatKey>(CATS.some((c) => c.key === initial) ? initial : "gmail");
 
   const active = CATS.find((c) => c.key === tab)!;
 
@@ -49,26 +53,11 @@ function ConnectionsHub() {
         {/* Kategori navigasyonu */}
         <aside className="md:w-64 md:shrink-0">
           <div className="flex flex-col gap-1">
-            {CATS.map((c) => {
-              const Icon = c.icon;
-              const on = c.key === tab;
-              return (
-                <button
-                  key={c.key}
-                  onClick={() => setTab(c.key)}
-                  className={cn(
-                    "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                    on ? "border-indigo-500/40 bg-indigo-500/10" : "border-zinc-800/70 hover:border-zinc-700 hover:bg-zinc-900/40",
-                  )}
-                >
-                  <Icon size={15} className={cn("mt-0.5 shrink-0", on ? "text-indigo-300" : "text-zinc-500")} />
-                  <span className="min-w-0">
-                    <span className={cn("block text-sm font-medium", on ? "text-zinc-100" : "text-zinc-300")}>{c.label}</span>
-                    <span className="block text-[11px] leading-snug text-zinc-600">{c.desc}</span>
-                  </span>
-                </button>
-              );
-            })}
+            {/* Google grup etiketi */}
+            <p className="mb-0.5 px-1 text-[10px] font-medium uppercase tracking-wider text-zinc-600">Google</p>
+            {CATS.filter((c) => GOOGLE_KEYS.includes(c.key)).map((c) => <NavItem key={c.key} c={c} tab={tab} setTab={setTab} />)}
+            <div className="my-1 border-t border-zinc-800/60" />
+            {CATS.filter((c) => !GOOGLE_KEYS.includes(c.key)).map((c) => <NavItem key={c.key} c={c} tab={tab} setTab={setTab} />)}
           </div>
         </aside>
 
@@ -79,7 +68,9 @@ function ConnectionsHub() {
             <p className="mt-0.5 text-xs text-zinc-500">{active.desc}</p>
           </div>
 
-          {tab === "google" && <div className="px-1"><GoogleSection /></div>}
+          {tab === "gmail" && <GoogleServiceSection service="gmail" />}
+          {tab === "gcalendar" && <GoogleServiceSection service="gcalendar" />}
+          {tab === "gdrive" && <GoogleServiceSection service="gdrive" />}
           {tab === "database" && <Embed><DbConnectionsPage /></Embed>}
           {tab === "github" && <Embed><GithubConnectionsPage /></Embed>}
           {tab === "notify" && <Embed><NotificationChannelsPage /></Embed>}
@@ -93,6 +84,26 @@ function ConnectionsHub() {
         </section>
       </div>
     </div>
+  );
+}
+
+function NavItem({ c, tab, setTab }: { c: (typeof CATS)[number]; tab: CatKey; setTab: (k: CatKey) => void }) {
+  const Icon = c.icon;
+  const on = c.key === tab;
+  return (
+    <button
+      onClick={() => setTab(c.key)}
+      className={cn(
+        "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
+        on ? "border-indigo-500/40 bg-indigo-500/10" : "border-zinc-800/70 hover:border-zinc-700 hover:bg-zinc-900/40",
+      )}
+    >
+      <Icon size={15} className={cn("mt-0.5 shrink-0", on ? "text-indigo-300" : "text-zinc-500")} />
+      <span className="min-w-0">
+        <span className={cn("block text-sm font-medium", on ? "text-zinc-100" : "text-zinc-300")}>{c.label}</span>
+        <span className="block text-[11px] leading-snug text-zinc-600">{c.desc}</span>
+      </span>
+    </button>
   );
 }
 
