@@ -102,19 +102,34 @@ def register_team_tools() -> None:
 
     @ToolRegistry.register(
         "team_board",
-        "Read all notes currently on the shared team board.",
-        {"type": "object", "properties": {}},
+        "Read notes on the shared team board. Returns the most recent notes first (truncated to save tokens).",
+        {
+            "type": "object",
+            "properties": {
+                "max_notes": {
+                    "type": "integer",
+                    "description": "Max notes to return (default 10, max 30).",
+                },
+            },
+        },
     )
-    async def team_board(ctx: ToolContext) -> str:
+    async def team_board(ctx: ToolContext, max_notes: int = 10) -> str:
         from app.models.team import TeamRunMessage
         if ctx.team_run_id is None:
             return "[team_board error: not in a team context]"
+        max_notes = max(1, min(max_notes, 30))
+        _NOTE_MAX = 800  # not başına karakter limiti
         rows = (await ctx.db.execute(
             select(TeamRunMessage).where(
                 TeamRunMessage.team_run_id == ctx.team_run_id,
                 TeamRunMessage.kind == "board",
-            ).order_by(TeamRunMessage.created_at)
+            ).order_by(TeamRunMessage.created_at.desc()).limit(max_notes)
         )).scalars().all()
         if not rows:
             return "The team board is empty."
-        return "\n\n".join(f"[{r.from_role}] {r.title}: {r.content}" for r in rows)
+        parts = []
+        for r in reversed(rows):  # kronolojik sırayla döndür
+            body = r.content if len(r.content) <= _NOTE_MAX else r.content[:_NOTE_MAX] + "…"
+            parts.append(f"[{r.from_role}] {r.title or 'note'}:\n{body}")
+        header = f"Team board ({len(rows)} notes shown):\n\n"
+        return header + "\n\n---\n\n".join(parts)

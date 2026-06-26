@@ -718,7 +718,9 @@ class AgentRunner(BaseAgent):
         messages: list[Message] = []
         if self.config.system_prompt:
             messages.append(Message(role="system", content=self.config.system_prompt))
-        # Çok-turlu hafıza: önceki thread mesajları (user/assistant final metinleri)
-        messages.extend(self.history)
+        # Çok-turlu hafıza: önceki thread mesajları — son 20 mesajla kır (token tasarrufu)
+        _MAX_HISTORY = 20
+        history = self.history[-_MAX_HISTORY:] if len(self.history) > _MAX_HISTORY else self.history
+        messages.extend(history)
         messages.append(Message(role="user", content=user_input))
         return messages

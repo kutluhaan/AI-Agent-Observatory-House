@@ -134,16 +134,29 @@ async def build_member_runner(
     if shared:
         parts.append(f"--- TEAM INSTRUCTIONS (tüm ekip) ---\n{shared}")
 
-    # B2: Ekip Knowledge Base — aktif öğeler her üyenin promptuna eklenir
+    # B2: Ekip Knowledge Base — aktif öğeler her üyenin promptuna eklenir (kırpılmış)
     from app.models.team_knowledge import TeamKnowledge
     tk_rows = (await db.execute(
         select(TeamKnowledge).where(TeamKnowledge.team_id == team_id, TeamKnowledge.is_active.is_(True))
         .order_by(TeamKnowledge.created_at.asc())
     )).scalars().all()
     if tk_rows:
-        kb = "\n".join(f"- [{k.kind}] {k.name}: {k.content}" for k in tk_rows if k.content.strip())
-        if kb:
-            parts.append(f"--- EKİP BİLGİ TABANI (Knowledge Base) ---\n{kb}")
+        _KB_ITEM_MAX = 600   # öğe başına karakter
+        _KB_TOTAL_MAX = 4000 # KB bloğu toplam karakter
+        lines: list[str] = []
+        total = 0
+        for k in tk_rows:
+            if not k.content.strip():
+                continue
+            body = k.content if len(k.content) <= _KB_ITEM_MAX else k.content[:_KB_ITEM_MAX] + "…"
+            line = f"- [{k.kind}] {k.name}: {body}"
+            if total + len(line) > _KB_TOTAL_MAX:
+                lines.append(f"(+ {len(tk_rows) - len(lines)} öğe kırpıldı — token tasarrufu)")
+                break
+            lines.append(line)
+            total += len(line)
+        if lines:
+            parts.append(f"--- EKİP BİLGİ TABANI ---\n" + "\n".join(lines))
 
     # Bütçe-farkındalığı: ajanın gerçek limitlerini prompt'a dinamik enjekte et
     # (sayı statik değil; team ayarı değişince prompt da değişir). Ajan limiti BİLEREK çalışsın.
