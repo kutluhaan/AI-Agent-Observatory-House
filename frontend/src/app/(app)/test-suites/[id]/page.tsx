@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, ChevronRight, SlidersHorizontal, GitCompare, Plus, X } from "lucide-react";
+import { ArrowLeft, Play, ChevronRight, SlidersHorizontal, GitCompare, Plus, X, Pencil, Check } from "lucide-react";
 import { GuideDrawer } from "@/components/test-suites/guide-panel";
 import {
   api,
@@ -37,6 +37,14 @@ export default function TestSuiteDetailPage() {
   const [error, setError] = useState("");
   const [parallel, setParallel] = useState(false);
   const [starting, setStarting] = useState(false);
+
+  // Edit modu
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editYaml, setEditYaml] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // F4.3 — A/B prompt deneyi
   const [experiments, setExperiments] = useState<Experiment[]>([]);
@@ -72,6 +80,33 @@ export default function TestSuiteDetailPage() {
     },
     [id],
   );
+
+  function startEdit() {
+    if (!suite) return;
+    setEditName(suite.name);
+    setEditDesc(suite.description ?? "");
+    setEditYaml(suite.config_yaml ?? "");
+    setSaveError("");
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const updated = await api.patch<TestSuite>(`/test-suites/${id}`, {
+        name: editName.trim() || undefined,
+        description: editDesc.trim() || null,
+        config_yaml: editYaml,
+      });
+      setSuite(updated);
+      setEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleRun() {
     setStarting(true);
@@ -133,51 +168,87 @@ export default function TestSuiteDetailPage() {
       </Link>
 
       <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-zinc-100">{suite?.name}</h1>
-          {suite?.description && (
-            <p className="mt-1 text-sm text-zinc-500">{suite.description}</p>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex flex-col gap-2">
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xl font-semibold text-zinc-100 outline-none focus:border-indigo-500 w-full"
+              />
+              <input
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                placeholder="Açıklama (opsiyonel)"
+                className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-sm text-zinc-400 outline-none focus:border-indigo-500 w-full"
+              />
+            </div>
+          ) : (
+            <>
+              <h1 className="text-xl font-semibold text-zinc-100">{suite?.name}</h1>
+              {suite?.description && (
+                <p className="mt-1 text-sm text-zinc-500">{suite.description}</p>
+              )}
+            </>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <div
-            className="inline-flex items-center rounded-lg border border-zinc-800 bg-zinc-950/50 p-0.5 text-xs"
-            title="Case'ler sırayla mı yoksa aynı anda mı çalışsın"
-          >
-            <button
-              type="button"
-              onClick={() => setParallel(false)}
-              className={cn(
-                "rounded-md px-2.5 py-1 font-medium transition-colors",
-                !parallel ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
-              )}
-            >
-              Sıralı
-            </button>
-            <button
-              type="button"
-              onClick={() => setParallel(true)}
-              className={cn(
-                "rounded-md px-2.5 py-1 font-medium transition-colors",
-                parallel ? "bg-indigo-500/20 text-indigo-200" : "text-zinc-500 hover:text-zinc-300",
-              )}
-            >
-              Paralel
-            </button>
-          </div>
-          <GuideDrawer />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setAbOpen((o) => !o)}
-          >
-            <GitCompare size={13} />
-            A/B test
-          </Button>
-          <Button size="sm" onClick={handleRun} loading={starting}>
-            <Play size={13} />
-            Run
-          </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {editing ? (
+            <>
+              <Button size="sm" onClick={handleSave} loading={saving}>
+                <Check size={13} />
+                Kaydet
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+                İptal
+              </Button>
+            </>
+          ) : (
+            <>
+              <div
+                className="inline-flex items-center rounded-lg border border-zinc-800 bg-zinc-950/50 p-0.5 text-xs"
+                title="Case'ler sırayla mı yoksa aynı anda mı çalışsın"
+              >
+                <button
+                  type="button"
+                  onClick={() => setParallel(false)}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 font-medium transition-colors",
+                    !parallel ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
+                  )}
+                >
+                  Sıralı
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setParallel(true)}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 font-medium transition-colors",
+                    parallel ? "bg-indigo-500/20 text-indigo-200" : "text-zinc-500 hover:text-zinc-300",
+                  )}
+                >
+                  Paralel
+                </button>
+              </div>
+              <GuideDrawer />
+              <Button size="sm" variant="outline" onClick={startEdit}>
+                <Pencil size={13} />
+                Düzenle
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setAbOpen((o) => !o)}
+              >
+                <GitCompare size={13} />
+                A/B test
+              </Button>
+              <Button size="sm" onClick={handleRun} loading={starting}>
+                <Play size={13} />
+                Run
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -238,15 +309,24 @@ export default function TestSuiteDetailPage() {
         </div>
       )}
 
-      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      {(error || saveError) && <Alert variant="error" className="mb-4">{error || saveError}</Alert>}
 
       {/* YAML */}
       <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         Configuration
       </h2>
-      <pre className="mb-8 overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-xs text-zinc-400">
-        {suite?.config_yaml}
-      </pre>
+      {editing ? (
+        <Textarea
+          value={editYaml}
+          onChange={(e) => setEditYaml(e.target.value)}
+          rows={20}
+          className="mb-8 font-mono text-xs"
+        />
+      ) : (
+        <pre className="mb-8 overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-xs text-zinc-400">
+          {suite?.config_yaml}
+        </pre>
+      )}
 
       {/* Performans (kalıcı: tamamlanmış run'lardan + suite'e kayıtlı KPI seçimi) */}
       {stats && stats.completed_runs > 0 && kpiCatalog && (
