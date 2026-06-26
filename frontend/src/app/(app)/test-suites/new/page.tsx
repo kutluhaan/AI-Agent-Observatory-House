@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { GuidePanel } from "@/components/test-suites/guide-panel";
+import { GuideDrawer } from "@/components/test-suites/guide-panel";
 
 const EXAMPLE_YAML = `name: research-suite
 description: Checks for a file-system research agent
@@ -118,9 +118,10 @@ export default function NewTestSuitePage() {
         Test suites
       </Link>
 
-      <h1 className="mb-6 text-xl font-semibold text-zinc-100">Yeni test suite</h1>
-
-      <GuidePanel defaultOpen={false} />
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-zinc-100">Yeni test suite</h1>
+        <GuideDrawer />
+      </div>
 
       {/* Mod seçimi: YAML | Dataset */}
       <div className="mb-5 inline-flex items-center rounded-lg border border-zinc-800 bg-zinc-950/50 p-0.5 text-xs">

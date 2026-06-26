@@ -7,7 +7,6 @@ import { api, type TestSuite } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
-import { GuidePanel } from "@/components/test-suites/guide-panel";
 
 export default function TestSuitesPage() {
   const [suites, setSuites] = useState<TestSuite[]>([]);
@@ -38,8 +37,6 @@ export default function TestSuitesPage() {
           </Button>
         </Link>
       </div>
-
-      <GuidePanel />
 
       {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 

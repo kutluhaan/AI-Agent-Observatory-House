@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Play, ChevronRight, SlidersHorizontal, GitCompare, Plus, X } from "lucide-react";
+import { GuideDrawer } from "@/components/test-suites/guide-panel";
 import {
   api,
   ApiError,
@@ -164,6 +165,7 @@ export default function TestSuiteDetailPage() {
               Paralel
             </button>
           </div>
+          <GuideDrawer />
           <Button
             size="sm"
             variant="outline"
