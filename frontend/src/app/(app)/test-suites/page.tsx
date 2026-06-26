@@ -36,7 +36,7 @@ const JUDGES = [
 ];
 
 function GuidePanel() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   return (
     <div className="mb-8 rounded-xl border border-zinc-800/80 bg-zinc-900/30">
       <button
