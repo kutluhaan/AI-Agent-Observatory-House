@@ -76,16 +76,20 @@ export default function TeamsPage() {
                 <p className="text-sm font-medium text-zinc-100">{t.name}</p>
                 {t.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{t.description}</p>}
               </div>
-              <div className="flex flex-wrap gap-1 border-t border-zinc-800/60 pt-3">
-                {t.members.map((m) => {
-                  const RI = roleIcon(m.role);
-                  return (
-                    <Badge key={m.id} variant={m.role === "coordinator" ? "indigo" : "zinc"}>
-                      <RI size={10} />
-                      {m.role}
-                    </Badge>
-                  );
-                })}
+              <div className="mt-auto flex flex-col gap-1.5 border-t border-zinc-800/60 pt-3">
+                <span className="text-[10px] uppercase tracking-wide text-zinc-600">{t.members.length} üye</span>
+                <div className="flex flex-wrap gap-1">
+                  {t.members.map((m) => {
+                    const RI = roleIcon(m.role);
+                    return (
+                      <Badge key={m.id} variant={m.role === "coordinator" ? "indigo" : "zinc"}>
+                        <RI size={10} />
+                        <span className="font-medium">{m.agent_name ?? "—"}</span>
+                        <span className="text-zinc-500">· {m.role}</span>
+                      </Badge>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ))}

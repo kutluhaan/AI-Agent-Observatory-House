@@ -238,6 +238,8 @@ export default function TeamChatPage() {
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(e); } }}
                 placeholder="Ekibe görev yaz…  (Enter = gönder, Shift+Enter = yeni satır)"
                 rows={1}
+                autoGrow
+                maxRows={10}
                 className="resize-none"
               />
             </div>
@@ -479,7 +481,7 @@ function MsgLine({ m, name }: { m: TeamRunMessage; name: (r: string | null) => s
           <span className="min-w-0 flex-1 truncate text-amber-300/90">{m.title}</span>
           <ChevronDown size={10} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
         </button>
-        {open && <div className="border-t border-zinc-800/50 px-2 py-1.5 text-[11px] text-zinc-400"><Markdown>{m.content}</Markdown></div>}
+        {open && <div className="overflow-auto break-words border-t border-zinc-800/50 px-2 py-1.5 text-[11px] text-zinc-400"><Markdown>{m.content}</Markdown></div>}
       </div>
     );
   }
@@ -511,13 +513,20 @@ function MsgLine({ m, name }: { m: TeamRunMessage; name: (r: string | null) => s
           ? <span className="text-zinc-500">{p.urls.length} URL</span>
           : <span className="truncate text-zinc-600">{m.content}</span>;
     return (
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 text-left text-[11px]">
-        <Who role={m.from_role} name={name} />
-        <Wrench size={10} className="shrink-0 text-amber-400" />
-        <span className="shrink-0 text-zinc-400">{m.title}</span>
-        <span className="min-w-0 flex-1">{open ? <span className="text-zinc-500">{m.content.slice(0, 400)}</span> : argNode}</span>
-        <ChevronDown size={10} className={cn("ml-auto shrink-0 transition-transform", open && "rotate-180")} />
-      </button>
+      <div className="flex flex-col">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 text-left text-[11px]">
+          <Who role={m.from_role} name={name} />
+          <Wrench size={10} className="shrink-0 text-amber-400" />
+          <span className="shrink-0 text-zinc-400">{m.title}</span>
+          <span className="min-w-0 flex-1 truncate">{argNode}</span>
+          <ChevronDown size={10} className={cn("ml-auto shrink-0 transition-transform", open && "rotate-180")} />
+        </button>
+        {open && (
+          <div className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-zinc-950/40 px-2 py-1.5 text-[11px] text-zinc-500">
+            {m.content}
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -536,7 +545,7 @@ function MsgLine({ m, name }: { m: TeamRunMessage; name: (r: string | null) => s
         <ChevronDown size={10} className={cn("ml-auto mt-0.5 shrink-0 text-zinc-700 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <div className="mt-1 max-h-72 overflow-y-auto rounded-md bg-zinc-950/40 px-2 py-1.5 text-[11px] text-zinc-300">
+        <div className="mt-1 max-h-72 overflow-auto break-words rounded-md bg-zinc-950/40 px-2 py-1.5 text-[11px] text-zinc-300">
           <Markdown>{m.content}</Markdown>
         </div>
       )}

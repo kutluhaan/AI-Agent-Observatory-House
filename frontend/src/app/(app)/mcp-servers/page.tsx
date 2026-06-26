@@ -110,6 +110,23 @@ function RegistryBrowser({ addedUrls, onAdded }: { addedUrls: Set<string>; onAdd
   );
 }
 
+function RegistryIcon({ url, name }: { url: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const letter = (deriveName(name)[0] || "?").toUpperCase();
+  if (!url || failed) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-indigo-500/10 text-xs font-semibold text-indigo-300">
+        {letter}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" onError={() => setFailed(true)}
+      className="h-8 w-8 shrink-0 rounded-md bg-white/5 object-contain p-0.5" />
+  );
+}
+
 function RegistryRow({ entry, added, onAdded }: { entry: McpRegistryEntry; added: boolean; onAdded: () => void }) {
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -134,6 +151,7 @@ function RegistryRow({ entry, added, onAdded }: { entry: McpRegistryEntry; added
   return (
     <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 p-3">
       <div className="flex items-start gap-3">
+        <RegistryIcon url={entry.icon_url} name={entry.name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium text-zinc-200">{deriveName(entry.name)}</span>

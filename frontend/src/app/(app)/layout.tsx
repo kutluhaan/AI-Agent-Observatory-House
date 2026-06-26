@@ -3,9 +3,9 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2, Bell } from "lucide-react";
+import { ChevronDown, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2, Bell } from "lucide-react";
 import { Logo } from "@/components/logo";
-import { Button } from "@/components/ui/button";
+import { ProfileMenu } from "@/components/profile-menu";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,6 @@ function NavTabs() {
           </Link>
         );
       })}
-      <NotificationsTab />
     </nav>
   );
 }
@@ -59,13 +58,12 @@ function NotificationsTab() {
   }, [pathname]); // sayfa değişince (ör. /notifications ziyaretinden sonra) yenile
   const active = pathname.startsWith("/notifications");
   return (
-    <Link href="/notifications" title="Bildirimler"
-      className={cn("relative flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+    <Link href="/notifications" title="Bildirimler" aria-label="Bildirimler"
+      className={cn("relative flex h-8 w-8 items-center justify-center rounded-md transition-colors",
         active ? "bg-zinc-800/80 text-zinc-100" : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300")}>
-      <Bell size={13} className={active ? "text-indigo-400" : ""} />
-      Bildirimler
+      <Bell size={16} className={active ? "text-indigo-400" : ""} />
       {count > 0 && (
-        <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-semibold text-white">
+        <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-semibold leading-none text-white">
           {count > 9 ? "9+" : count}
         </span>
       )}
@@ -93,7 +91,7 @@ function OrgBadge({
 
 function TopBar() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 flex h-12 items-center border-b border-zinc-900 bg-[#09090b]/90 px-4 backdrop-blur-sm">
@@ -110,6 +108,7 @@ function TopBar() {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
+        {user?.org_id && <NotificationsTab />}
         {user?.org_name || user?.org_slug ? (
           <button
             onClick={() => router.push("/select-org")}
@@ -132,17 +131,7 @@ function TopBar() {
             Create workspace
           </button>
         )}
-        {user && (
-          <span className="ml-1 hidden text-xs text-zinc-600 sm:inline">{user.email}</span>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={logout}
-          title="Sign out"
-        >
-          <LogOut size={14} />
-        </Button>
+        {user && <ProfileMenu />}
       </div>
     </header>
   );

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Mail, Check, X } from "lucide-react";
+import { Mail, Check, X, Calendar, HardDrive } from "lucide-react";
 import { api, ApiError, type ServiceConnection } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -29,6 +29,13 @@ export function GoogleSection() {
     : null;
 
   const google = connections.find((c) => c.provider === "google");
+  const hasScope = (kw: string) => (google?.scopes ?? []).some((s) => s.includes(kw));
+  const SERVICES = [
+    { key: "gmail", label: "Gmail", desc: "E-posta oku & gönder", icon: Mail, ok: hasScope("gmail") },
+    { key: "calendar", label: "Google Takvim", desc: "Etkinlik listele & oluştur", icon: Calendar, ok: hasScope("calendar") },
+    { key: "drive", label: "Google Drive", desc: "Dosya ara & oku", icon: HardDrive, ok: hasScope("drive") },
+  ];
+  const missingSome = !!google && SERVICES.some((s) => !s.ok);
 
   async function connectGoogle() {
     setConnecting(true);
@@ -61,18 +68,19 @@ export function GoogleSection() {
         <div className="flex justify-center py-12"><Spinner className="h-5 w-5" /></div>
       ) : (
         <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+          {/* Hesap başlığı */}
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
               <Mail size={18} className="text-red-400" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-zinc-200">Google (Gmail · Takvim · Drive)</p>
+              <p className="text-sm font-medium text-zinc-200">Google</p>
               {google ? (
                 <p className="flex items-center gap-1 text-xs text-green-400">
                   <Check size={12} /> {google.account_email ?? "bağlı"}
                 </p>
               ) : (
-                <p className="text-xs text-zinc-500">Bağlı değil — Gmail/Takvim/Drive araçları için bağla</p>
+                <p className="text-xs text-zinc-500">Bağlı değil — bağlandığında her servis ayrı yetkilendirilir</p>
               )}
             </div>
             {google ? (
@@ -85,16 +93,33 @@ export function GoogleSection() {
               </Button>
             )}
           </div>
-          {google && (
-            <p className="mt-3 border-t border-zinc-800/60 pt-3 text-[11px] text-zinc-600">
-              İzinler: {google.scopes.map((s) => s.split("/").pop()).filter(Boolean).join(", ") || "—"}
-            </p>
-          )}
+
+          {/* Servisler — granted scope'lara göre AYRI ayrı gerçek durum */}
+          <div className="mt-3 flex flex-col gap-2 border-t border-zinc-800/60 pt-3">
+            {SERVICES.map((s) => (
+              <div key={s.key} className="flex items-center gap-2.5">
+                <s.icon size={15} className={s.ok ? "text-zinc-300" : "text-zinc-600"} />
+                <div className="flex-1">
+                  <p className={s.ok ? "text-xs text-zinc-200" : "text-xs text-zinc-500"}>{s.label}</p>
+                  <p className="text-[10px] text-zinc-600">{s.desc}</p>
+                </div>
+                {s.ok ? (
+                  <span className="flex items-center gap-1 text-[11px] text-green-400"><Check size={12} />yetkili</span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] text-zinc-600"><X size={12} />izin yok</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
-      <p className="mt-4 text-[11px] text-zinc-600">
-        Yeni izin (Takvim/Drive) eklendiyse bağlantıyı kesip yeniden bağla. Agent oluştururken
-        <span className="text-zinc-400"> E-posta (Gmail)</span> ve <span className="text-zinc-400">Takvim & Drive</span> kategorilerinden araçları seç.
+      {missingSome && (
+        <p className="mt-4 text-[11px] text-amber-400/80">
+          Bazı servislerin izni yok. Takvim/Drive&apos;ı kullanmak için bağlantıyı kesip yeniden bağlan — onay ekranında tüm izinleri ver.
+        </p>
+      )}
+      <p className="mt-2 text-[11px] text-zinc-600">
+        Agent oluştururken <span className="text-zinc-400">E-posta (Gmail)</span>, <span className="text-zinc-400">Takvim</span> ve <span className="text-zinc-400">Drive</span> araçlarını yalnız yetkili servisler için seç.
       </p>
     </div>
   );

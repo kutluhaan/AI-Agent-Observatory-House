@@ -22,6 +22,7 @@ import {
   HelpCircle,
   FolderTree,
   AlertTriangle,
+  XCircle,
   ChevronDown,
   BookOpen,
   Settings2,
@@ -505,6 +506,8 @@ export default function ChatPage() {
                 }}
                 placeholder="Mesaj yaz…  (Enter = gönder, Shift+Enter = yeni satır)"
                 rows={1}
+                autoGrow
+                maxRows={10}
                 disabled={running}
                 className="resize-none"
               />
@@ -595,8 +598,10 @@ function MessageBubble({ msg, traceSuffix }: { msg: ChatMessage; traceSuffix: st
 function ToolCard({ tool }: { tool: ToolBlock }) {
   const [open, setOpen] = useState(false);
   const rows = formatArgs(tool.args);
-  // Tek satır özet: ilk argüman değeri ya da sonuç boyutu
-  const summary = rows[0]?.value ?? (tool.result ? `${tool.result.length} karakter sonuç` : "");
+  // Tek satır özet: ilk argüman değeri (web araması için sorgu/site) — ham sonuç değil
+  const summary = rows[0]?.value ?? "";
+  // Başarısızlık: tool sonucu "[... error ...]" kalıbıyla döner
+  const failed = tool.status === "done" && !!tool.result && /^\s*\[[^\]]*error/i.test(tool.result);
   return (
     <div className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 text-xs">
       <button
@@ -608,8 +613,10 @@ function ToolCard({ tool }: { tool: ToolBlock }) {
         <span className="font-medium text-zinc-300">{toolLabel(tool.name)}</span>
         {tool.status === "running" ? (
           <Spinner className="h-3 w-3" />
+        ) : failed ? (
+          <XCircle size={14} className="shrink-0 text-red-400" />
         ) : (
-          <Badge variant="green">tamam</Badge>
+          <CheckCircle2 size={14} className="shrink-0 text-green-400" />
         )}
         {summary && <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-600">· {summary}</span>}
         {(rows.length > 0 || tool.result) && (

@@ -138,6 +138,8 @@ export interface McpRegistryEntry {
   remote_url: string | null;
   addable: boolean;
   requires_auth: boolean;
+  icon_url: string | null;
+  popularity: number;
 }
 
 export interface McpToolInfo {

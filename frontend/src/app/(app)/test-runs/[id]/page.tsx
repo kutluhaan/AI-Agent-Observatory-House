@@ -132,12 +132,13 @@ export default function TestRunDetailPage() {
 
       <div className="mb-6 flex items-center gap-3">
         <h1 className="text-xl font-semibold text-zinc-100">Test run</h1>
-        <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
-        {live && (
+        {live ? (
           <span className="flex items-center gap-1.5 text-xs text-indigo-400">
             <Spinner className="h-3 w-3" />
-            running…
+            Çalışıyor…
           </span>
+        ) : (
+          <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
         )}
         {!live && case_results.length > 0 && (
           <button

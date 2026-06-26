@@ -4,8 +4,8 @@
  */
 
 const TOOL_LABELS: Record<string, string> = {
-  web_search: "Web'de arama yap",
-  read_url: "Bir web sayfasını oku",
+  web_search: "Web araması",
+  read_url: "Web sayfası",
   summarize: "Metni özetle",
   save_note: "Not kaydet",
   get_notes: "Kaydedilen notları getir",
