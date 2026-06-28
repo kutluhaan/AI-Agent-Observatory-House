@@ -1,16 +1,16 @@
 """
-Workflow Runner — Faz 2
+Workflow Runner — Faz 2/3
 
 BFS graph traversal + fire-and-forget execution.
-Her node için WorkflowNodeResult oluşturulur, WS üzerinden broadcast edilir.
+Faz 3: proper rule evaluator for decision nodes + loop executor.
 """
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from collections import deque
 from datetime import UTC, datetime
-from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -27,7 +27,6 @@ logger = structlog.get_logger()
 # ── Entry point ───────────────────────────────────────────────
 
 def start_workflow_run(workflow_id: uuid.UUID, run_id: uuid.UUID, org_id: uuid.UUID) -> None:
-    """Schedule background execution (fire-and-forget)."""
     asyncio.create_task(_execute_workflow(workflow_id, run_id, org_id))
 
 
@@ -55,15 +54,20 @@ async def _execute_workflow(
             edges: list[dict] = graph.get("edges", [])
             node_map = {n["id"]: n for n in raw_nodes}
 
-            # Find start node
             start_nodes = [n for n in raw_nodes if n.get("type") == "start"]
             if not start_nodes:
                 await _fail_run(db, run, org_id, "Start node bulunamadı.")
                 return
 
+            # Pre-mark loop body nodes so BFS doesn't visit them directly
+            loop_body_ids: set[str] = set()
+            for n in raw_nodes:
+                if n.get("type") == "loop":
+                    loop_body_ids.update((n.get("data") or {}).get("body_node_ids") or [])
+
             context: dict[str, dict] = {}
             queue: deque[str] = deque([start_nodes[0]["id"]])
-            visited: set[str] = set()
+            visited: set[str] = set(loop_body_ids)
 
             while queue:
                 node_id = queue.popleft()
@@ -75,12 +79,11 @@ async def _execute_workflow(
                 if node is None:
                     continue
 
-                # Mark node running
                 nr = await _upsert_node_result(db, run_id, node_id, "running")
                 await _broadcast(org_id, run_id, node_id, "running", None, None)
 
                 try:
-                    output, active_handle = await _execute_node(node, context, org_id, db)
+                    output, active_handle = await _execute_node(node, context, org_id, db, node_map)
                     context[node_id] = {"output": output}
                     await _finish_node_result(db, nr, "completed", output, None)
                     await _broadcast(org_id, run_id, node_id, "completed", output, None)
@@ -92,11 +95,9 @@ async def _execute_workflow(
                     await _fail_run(db, run, org_id, f"Node '{node_id}' başarısız: {err}")
                     return
 
-                # Follow outgoing edges
                 for edge in edges:
                     if edge.get("source") != node_id:
                         continue
-                    # Decision: only follow the active handle
                     if node.get("type") == "decision" and active_handle:
                         if edge.get("sourceHandle") != active_handle:
                             continue
@@ -104,7 +105,6 @@ async def _execute_workflow(
                     if target and target not in visited:
                         queue.append(target)
 
-            # All nodes done
             run.status = "completed"
             run.ended_at = datetime.now(UTC)
             await db.commit()
@@ -112,7 +112,6 @@ async def _execute_workflow(
 
         except Exception as exc:
             logger.error("workflow_runner.unexpected", run_id=str(run_id), error=str(exc))
-            # Reopen session to mark run failed
             async with AsyncSessionLocal() as db2:
                 run2 = (await db2.execute(
                     select(WorkflowRun).where(WorkflowRun.id == run_id)
@@ -132,6 +131,7 @@ async def _execute_node(
     context: dict[str, dict],
     org_id: uuid.UUID,
     db: AsyncSession,
+    node_map: dict[str, dict] | None = None,
 ) -> tuple[str, str | None]:
     """Returns (output_text, active_handle_or_None)."""
     node_type: str = node.get("type", "")
@@ -158,27 +158,38 @@ async def _execute_node(
         if not note:
             return "(boş not)", None
         prev = _prev_output(context)
-        # Orkestratör: notu + önceki çıktıyı LLM'e gönder
         output = await _orchestrate_note(note, prev, org_id, db)
         return output, None
 
     if node_type == "decision":
         conditions: list[dict] = data.get("conditions") or [{"handle": "evet", "label": "Evet"}]
-        prev = _prev_output(context).lower()
-        # Rule-based: ilk eşleşen koşul
         for cond in conditions:
-            label = (cond.get("label") or "").lower()
             handle = cond.get("handle", "")
-            cond_expr = (cond.get("condition") or "").lower()
-            check = cond_expr or label
-            if check and check in prev:
-                return handle, handle
-        # Fallback: LLM karar
-        handle = await _orchestrate_decision(conditions, prev, data.get("note", ""), org_id, db)
+            cond_expr = (cond.get("condition") or "").strip()
+            if cond_expr:
+                if _eval_condition(cond_expr, context):
+                    return handle, handle
+            else:
+                label = (cond.get("label") or "").lower()
+                if label and label in _prev_output(context).lower():
+                    return handle, handle
+        # LLM fallback
+        handle = await _orchestrate_decision(conditions, _prev_output(context), data.get("note", ""), org_id, db)
         return handle, handle
 
-    if node_type in ("team", "integration", "loop"):
-        return f"[{node_type}] henüz implement edilmedi.", None
+    if node_type == "loop":
+        return await _execute_loop(node, context, node_map or {}, org_id, db)
+
+    if node_type == "team":
+        return f"[team] henüz implement edilmedi.", None
+
+    if node_type == "integration":
+        service = data.get("service", "http")
+        operation = data.get("operation", "")
+        params: dict = data.get("params") or {}
+        from app.services.workflow.integrations import execute_integration
+        output = await execute_integration(service, operation, params, context, org_id, db)
+        return output, None
 
     return f"[{node_type}] bilinmeyen tip.", None
 
@@ -187,6 +198,84 @@ def _prev_output(context: dict[str, dict]) -> str:
     if not context:
         return ""
     return context[list(context.keys())[-1]].get("output", "")
+
+
+# ── Faz 3: Rule evaluator ────────────────────────────────────
+
+_CONDITION_RE = re.compile(
+    r'^(.+?)\s+(contains|not_contains|equals|startswith|endswith|regex)\s+"(.+?)"$',
+    re.IGNORECASE,
+)
+_REF_RE = re.compile(r'\{\{([\w-]+)\.(output|input)\}\}')
+
+
+def _eval_condition(expr: str, context: dict[str, dict]) -> bool:
+    """
+    Evaluates expressions like:
+      {{node_id.output}} contains "text"
+      {{node_id.output}} regex "pattern"
+      {{node_id.output}} equals "value"
+    Falls back to substring check in last output for plain text.
+    """
+    def _replace_ref(m: re.Match) -> str:
+        return context.get(m.group(1), {}).get(m.group(2), "")
+
+    resolved = _REF_RE.sub(_replace_ref, expr.strip())
+
+    m = _CONDITION_RE.match(resolved)
+    if m:
+        left, op, right = m.group(1).strip(), m.group(2).lower(), m.group(3)
+        if op == "contains":
+            return right.lower() in left.lower()
+        if op == "not_contains":
+            return right.lower() not in left.lower()
+        if op == "equals":
+            return left.strip() == right
+        if op == "startswith":
+            return left.lower().startswith(right.lower())
+        if op == "endswith":
+            return left.lower().endswith(right.lower())
+        if op == "regex":
+            return bool(re.search(right, left))
+
+    # Plain text: check in last output
+    return resolved.lower() in _prev_output(context).lower()
+
+
+# ── Faz 3: Loop executor ──────────────────────────────────────
+
+async def _execute_loop(
+    node: dict,
+    context: dict[str, dict],
+    node_map: dict[str, dict],
+    org_id: uuid.UUID,
+    db: AsyncSession,
+) -> tuple[str, str | None]:
+    data = node.get("data") or {}
+    body_node_ids: list[str] = data.get("body_node_ids") or []
+    max_iterations = max(1, int(data.get("max_iterations") or 5))
+    exit_condition: str = (data.get("exit_condition") or "").strip()
+
+    if not body_node_ids:
+        return "Döngü gövdesi boş.", None
+
+    last_output = ""
+    iterations_run = 0
+
+    for i in range(max_iterations):
+        iterations_run = i + 1
+        for nid in body_node_ids:
+            body_node = node_map.get(nid)
+            if body_node is None:
+                continue
+            out, _ = await _execute_node(body_node, context, org_id, db, node_map)
+            context[nid] = {"output": out}
+            last_output = out
+
+        if exit_condition and _eval_condition(exit_condition, context):
+            break
+
+    return f"[{iterations_run}/{max_iterations} iterasyon]\n{last_output}", None
 
 
 # ── Agent executor ────────────────────────────────────────────
@@ -250,18 +339,15 @@ async def _run_agent(agent_id: uuid.UUID, org_id: uuid.UUID, user_input: str, db
 # ── Orchestrator LLM calls ────────────────────────────────────
 
 async def _orchestrate_note(note: str, prev_output: str, org_id: uuid.UUID, db: AsyncSession) -> str:
-    """Calls LLM to execute a pure-note node."""
     provider = await _get_org_provider(org_id, db)
     if provider is None:
         return f"(Orkestratör LLM yok) Not: {note}"
 
-    messages = [
-        {"role": "user", "content": (
-            f"Workflow adımı: {note}\n\n"
-            f"Önceki adımın çıktısı:\n{prev_output or '(yok)'}\n\n"
-            "Bu adımı gerçekleştir ve çıktını yaz."
-        )}
-    ]
+    messages = [{"role": "user", "content": (
+        f"Workflow adımı: {note}\n\n"
+        f"Önceki adımın çıktısı:\n{prev_output or '(yok)'}\n\n"
+        "Bu adımı gerçekleştir ve çıktını yaz."
+    )}]
     try:
         result = await provider.chat(messages)
         return result.content if hasattr(result, "content") else str(result)
@@ -276,25 +362,21 @@ async def _orchestrate_decision(
     org_id: uuid.UUID,
     db: AsyncSession,
 ) -> str:
-    """Calls LLM to pick the right decision handle."""
     provider = await _get_org_provider(org_id, db)
     handles = [c.get("handle", "") for c in conditions]
     if provider is None or not handles:
         return handles[0] if handles else "evet"
 
     options = ", ".join(f'"{h}"' for h in handles)
-    messages = [
-        {"role": "user", "content": (
-            f"Karar nodu.\n{note or ''}\n\n"
-            f"Önceki adımın çıktısı:\n{prev_output or '(yok)'}\n\n"
-            f"Hangi yolu seçmeliyim? Seçenekler: {options}\n"
-            f"Sadece seçeneği yaz, başka bir şey ekleme."
-        )}
-    ]
+    messages = [{"role": "user", "content": (
+        f"Karar nodu.\n{note or ''}\n\n"
+        f"Önceki adımın çıktısı:\n{prev_output or '(yok)'}\n\n"
+        f"Hangi yolu seçmeliyim? Seçenekler: {options}\n"
+        "Sadece seçeneği yaz, başka bir şey ekleme."
+    )}]
     try:
         result = await provider.chat(messages)
         text = (result.content if hasattr(result, "content") else str(result)).strip().strip('"')
-        # Match to known handle
         for h in handles:
             if h.lower() in text.lower():
                 return h
@@ -304,14 +386,11 @@ async def _orchestrate_decision(
 
 
 async def _get_org_provider(org_id: uuid.UUID, db: AsyncSession):
-    """Picks any available provider for the org to use as orchestrator LLM."""
     from app.models.provider import ProviderCredential
     from app.services.providers.factory import get_provider
 
     cred = (await db.execute(
-        select(ProviderCredential).where(
-            ProviderCredential.organization_id == org_id,
-        ).limit(1)
+        select(ProviderCredential).where(ProviderCredential.organization_id == org_id).limit(1)
     )).scalar_one_or_none()
 
     if cred is None:

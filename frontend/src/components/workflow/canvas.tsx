@@ -135,6 +135,7 @@ function CanvasInner({ initialGraph, onSave, saving, topBar, extraActions }: Wor
         {selectedNode && (
           <ConfigPanel
             node={selectedNode}
+            allNodes={nodes}
             onClose={() => setSelectedNode(null)}
             onUpdate={updateNodeData}
           />
