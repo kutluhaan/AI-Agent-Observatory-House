@@ -17,7 +17,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_tenant_context
@@ -109,7 +109,37 @@ async def list_workflows(
     rows = (await db.execute(
         select(Workflow).where(Workflow.organization_id == ctx.org_id).order_by(Workflow.created_at.desc())
     )).scalars().all()
-    return success([_to_resp(w) for w in rows])
+
+    # Batch-fetch latest run per workflow (single query)
+    if rows:
+        wf_ids = [w.id for w in rows]
+        latest_subq = (
+            select(WorkflowRun.workflow_id, func.max(WorkflowRun.started_at).label("max_started"))
+            .where(WorkflowRun.workflow_id.in_(wf_ids))
+            .group_by(WorkflowRun.workflow_id)
+            .subquery()
+        )
+        latest_runs_rows = (await db.execute(
+            select(WorkflowRun).join(
+                latest_subq,
+                (WorkflowRun.workflow_id == latest_subq.c.workflow_id)
+                & (WorkflowRun.started_at == latest_subq.c.max_started),
+            )
+        )).scalars().all()
+        run_map: dict[uuid.UUID, WorkflowRun] = {r.workflow_id: r for r in latest_runs_rows}
+    else:
+        run_map = {}
+
+    def _with_last_run(w: Workflow) -> dict:
+        d = _to_resp(w)
+        run = run_map.get(w.id)
+        d["last_run"] = (
+            {"status": run.status, "started_at": run.started_at.isoformat(), "trigger_kind": run.trigger_kind}
+            if run else None
+        )
+        return d
+
+    return success([_with_last_run(w) for w in rows])
 
 
 @router.get("/{workflow_id}")

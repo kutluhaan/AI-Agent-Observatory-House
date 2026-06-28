@@ -98,6 +98,11 @@ async def lifespan(app: FastAPI):
     register_skill_tools()
     logger.info("Agent skill tools registered")
 
+    # Faz 5: Workflow cron scheduler
+    from app.services.workflow.scheduler import run_scheduler
+    scheduler_task = asyncio.create_task(run_scheduler())
+    app.state.scheduler_task = scheduler_task
+
     # M10: HITL Engine başlat
     init_hitl_engine(redis)
     logger.info("HITL engine initialized")
@@ -115,6 +120,13 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    if hasattr(app.state, "scheduler_task"):
+        app.state.scheduler_task.cancel()
+        try:
+            await app.state.scheduler_task
+        except asyncio.CancelledError:
+            pass
+
     if consumer_task is not None:
         app.state.trace_consumer.stop()
         consumer_task.cancel()
