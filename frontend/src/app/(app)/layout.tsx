@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2, Bell } from "lucide-react";
+import { ChevronDown, Plus, Zap, Activity, TestTube2, Server, LayoutDashboard, Users, Link2, Bell, Workflow } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { ProfileMenu } from "@/components/profile-menu";
 import { useAuth } from "@/contexts/auth";
@@ -15,6 +15,7 @@ const NAV = [
   { label: "Agents", href: "/agents", icon: Zap },
   { label: "Traces", href: "/traces", icon: Activity },
   { label: "Test Suites", href: "/test-suites", icon: TestTube2 },
+  { label: "Workflows", href: "/workflows", icon: Workflow },
   { label: "Ekipler", href: "/teams", icon: Users },
   { label: "Modeller", href: "/providers", icon: Server },
   { label: "Bağlantılar", href: "/connections", icon: Link2 },

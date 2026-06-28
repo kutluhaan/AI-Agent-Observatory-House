@@ -340,6 +340,17 @@ export interface HitlRequest {
   modified_arguments: Record<string, unknown> | null;
 }
 
+// ── Workflow tipleri ─────────────────────────────────────────
+
+export interface WorkflowData {
+  id: string;
+  name: string;
+  status: "active" | "unavailable" | "completed";
+  graph_json: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── M15: Test Suite / Run tipleri ───────────────────────────
 
 export interface TestSuite {

@@ -237,6 +237,10 @@ app.include_router(team_runs_ws_router, prefix="/ws", tags=["ws"])
 from app.api.v1.custom_tools import router as custom_tools_router
 app.include_router(custom_tools_router, prefix="/custom-tools", tags=["custom-tools"])
 
+from app.api.v1.workflows import router as workflows_router, workflow_runs_router
+app.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
+app.include_router(workflow_runs_router, prefix="/workflow-runs", tags=["workflows"])
+
 # ─── Health Check ─────────────────────────────────────────
 
 @app.get("/health", tags=["system"])
