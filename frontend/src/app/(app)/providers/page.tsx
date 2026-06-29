@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Server, CheckCircle2, Trash2, Activity } from "lucide-react";
+import { CheckCircle2, Trash2, Activity, Plug } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,42 @@ import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+
+// Source: Simple Icons (simpleicons.org) — canonical brand SVGs
+
+function OpenAIIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
+    </svg>
+  );
+}
+
+function AnthropicIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/>
+    </svg>
+  );
+}
+
+function GeminiIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>
+    </svg>
+  );
+}
+
+function OllamaIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M16.361 10.26a.894.894 0 0 0-.558.47l-.072.148.001.207c0 .193.004.217.059.353.076.193.152.312.291.448.24.238.51.3.872.205a.86.86 0 0 0 .517-.436.752.752 0 0 0 .08-.498c-.064-.453-.33-.782-.724-.897a1.06 1.06 0 0 0-.466 0zm-9.203.005c-.305.096-.533.32-.65.639a1.187 1.187 0 0 0-.06.52c.057.309.31.59.598.667.362.095.632.033.872-.205.14-.136.215-.255.291-.448.055-.136.059-.16.059-.353l.001-.207-.072-.148a.894.894 0 0 0-.565-.472 1.02 1.02 0 0 0-.474.007Zm4.184 2c-.131.071-.223.25-.195.383.031.143.157.288.353.407.105.063.112.072.117.136.004.038-.01.146-.029.243-.02.094-.036.194-.036.222.002.074.07.195.143.253.064.052.076.054.255.059.164.005.198.001.264-.03.169-.082.212-.234.15-.525-.052-.243-.042-.28.087-.355.137-.08.281-.219.324-.314a.365.365 0 0 0-.175-.48.394.394 0 0 0-.181-.033c-.126 0-.207.03-.355.124l-.085.053-.053-.032c-.219-.13-.259-.145-.391-.143a.396.396 0 0 0-.193.032zm.39-2.195c-.373.036-.475.05-.654.086-.291.06-.68.195-.951.328-.94.46-1.589 1.226-1.787 2.114-.04.176-.045.234-.045.53 0 .294.005.357.043.524.264 1.16 1.332 2.017 2.714 2.173.3.033 1.596.033 1.896 0 1.11-.125 2.064-.727 2.493-1.571.114-.226.169-.372.22-.602.039-.167.044-.23.044-.523 0-.297-.005-.355-.045-.531-.288-1.29-1.539-2.304-3.072-2.497a6.873 6.873 0 0 0-.855-.031zm.645.937a3.283 3.283 0 0 1 1.44.514c.223.148.537.458.671.662.166.251.26.508.303.82.02.143.01.251-.043.482-.08.345-.332.705-.672.957a3.115 3.115 0 0 1-.689.348c-.382.122-.632.144-1.525.138-.582-.006-.686-.01-.853-.042-.57-.107-1.022-.334-1.35-.68-.264-.28-.385-.535-.45-.946-.03-.192.025-.509.137-.776.136-.326.488-.73.836-.963.403-.269.934-.46 1.422-.512.187-.02.586-.02.773-.002zm-5.503-11a1.653 1.653 0 0 0-.683.298C5.617.74 5.173 1.666 4.985 2.819c-.07.436-.119 1.04-.119 1.503 0 .544.064 1.24.155 1.721.02.107.031.202.023.208a8.12 8.12 0 0 1-.187.152 5.324 5.324 0 0 0-.949 1.02 5.49 5.49 0 0 0-.94 2.339 6.625 6.625 0 0 0-.023 1.357c.091.78.325 1.438.727 2.04l.13.195-.037.064c-.269.452-.498 1.105-.605 1.732-.084.496-.095.629-.095 1.294 0 .67.009.803.088 1.266.095.555.288 1.143.503 1.534.071.128.243.393.264.407.007.003-.014.067-.046.141a7.405 7.405 0 0 0-.548 1.873c-.062.417-.071.552-.071.991 0 .56.031.832.148 1.279L3.42 24h1.478l-.05-.091c-.297-.552-.325-1.575-.068-2.597.117-.472.25-.819.498-1.296l.148-.29v-.177c0-.165-.003-.184-.057-.293a.915.915 0 0 0-.194-.25 1.74 1.74 0 0 1-.385-.543c-.424-.92-.506-2.286-.208-3.451.124-.486.329-.918.544-1.154a.787.787 0 0 0 .223-.531c0-.195-.07-.355-.224-.522a3.136 3.136 0 0 1-.817-1.729c-.14-.96.114-2.005.69-2.834.563-.814 1.353-1.336 2.237-1.475.199-.033.57-.028.776.01.226.04.367.028.512-.041.179-.085.268-.19.374-.431.093-.215.165-.333.36-.576.234-.29.46-.489.822-.729.413-.27.884-.467 1.352-.561.17-.035.25-.04.569-.04.319 0 .398.005.569.04a4.07 4.07 0 0 1 1.914.997c.117.109.398.457.488.602.034.057.095.177.132.267.105.241.195.346.374.43.14.068.286.082.503.045.343-.058.607-.053.943.016 1.144.23 2.14 1.173 2.581 2.437.385 1.108.276 2.267-.296 3.153-.097.15-.193.27-.333.419-.301.322-.301.722-.001 1.053.493.539.801 1.866.708 3.036-.062.772-.26 1.463-.533 1.854a2.096 2.096 0 0 1-.224.258.916.916 0 0 0-.194.25c-.054.109-.057.128-.057.293v.178l.148.29c.248.476.38.823.498 1.295.253 1.008.231 2.01-.059 2.581a.845.845 0 0 0-.044.098c0 .006.329.009.732.009h.73l.02-.074.036-.134c.019-.076.057-.3.088-.516.029-.217.029-1.016 0-1.258-.11-.875-.295-1.57-.597-2.226-.032-.074-.053-.138-.046-.141.008-.005.057-.074.108-.152.376-.569.607-1.284.724-2.228.031-.26.031-1.378 0-1.628-.083-.645-.182-1.082-.348-1.525a6.083 6.083 0 0 0-.329-.7l-.038-.064.131-.194c.402-.604.636-1.262.727-2.04a6.625 6.625 0 0 0-.024-1.358 5.512 5.512 0 0 0-.939-2.339 5.325 5.325 0 0 0-.95-1.02 8.097 8.097 0 0 1-.186-.152.692.692 0 0 1 .023-.208c.208-1.087.201-2.443-.017-3.503-.19-.924-.535-1.658-.98-2.082-.354-.338-.716-.482-1.15-.455-.996.059-1.8 1.205-2.116 3.01a6.805 6.805 0 0 0-.097.726c0 .036-.007.066-.015.066a.96.96 0 0 1-.149-.078A4.857 4.857 0 0 0 12 3.03c-.832 0-1.687.243-2.456.698a.958.958 0 0 1-.148.078c-.008 0-.015-.03-.015-.066a6.71 6.71 0 0 0-.097-.725C8.997 1.392 8.337.319 7.46.048a2.096 2.096 0 0 0-.585-.041Zm.293 1.402c.248.197.523.759.682 1.388.03.113.06.244.069.292.007.047.026.152.041.233.067.365.098.76.102 1.24l.002.475-.12.175-.118.178h-.278c-.324 0-.646.041-.954.124l-.238.06c-.033.007-.038-.003-.057-.144a8.438 8.438 0 0 1 .016-2.323c.124-.788.413-1.501.696-1.711.067-.05.079-.049.157.013zm9.825-.012c.17.126.358.46.498.888.28.854.36 2.028.212 3.145-.019.14-.024.151-.057.144l-.238-.06a3.693 3.693 0 0 0-.954-.124h-.278l-.119-.178-.119-.175.002-.474c.004-.669.066-1.19.214-1.772.157-.623.434-1.185.68-1.382.078-.062.09-.063.159-.012z"/>
+    </svg>
+  );
+}
+
+// ── Config ────────────────────────────────────────────────────
 
 interface ProviderEntry {
   provider: string;
@@ -18,93 +54,115 @@ interface ProviderEntry {
   updated_at: string | null;
 }
 
-const LABELS: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  gemini: "Google Gemini",
-  ollama: "Ollama (yerel)",
-  custom: "Custom (OpenAI-uyumlu)",
+const PROVIDER_META: Record<string, {
+  label: string;
+  desc: string;
+  color: string;       // icon bg color
+  textColor: string;   // icon text/fill color
+  Icon: React.ComponentType<{ size?: number }>;
+  hasBaseUrl?: boolean;
+  keyRequired?: boolean;
+  keyPlaceholder?: string;
+  urlPlaceholder?: string;
+}> = {
+  openai: {
+    label: "OpenAI",
+    desc: "GPT-4o, GPT-4.1, o3, o4-mini",
+    color: "bg-zinc-800",
+    textColor: "text-zinc-100",
+    Icon: OpenAIIcon,
+    keyRequired: true,
+    keyPlaceholder: "sk-proj-...",
+  },
+  anthropic: {
+    label: "Anthropic",
+    desc: "Claude Opus 4, Sonnet 4, Haiku 4",
+    color: "bg-[#D97757]/15",
+    textColor: "text-[#D97757]",
+    Icon: AnthropicIcon,
+    keyRequired: true,
+    keyPlaceholder: "sk-ant-...",
+  },
+  gemini: {
+    label: "Google Gemini",
+    desc: "Gemini 2.5 Pro, Flash, Nano",
+    color: "bg-blue-500/15",
+    textColor: "text-blue-400",
+    Icon: GeminiIcon,
+    keyRequired: true,
+    keyPlaceholder: "AIza...",
+  },
+  ollama: {
+    label: "Ollama",
+    desc: "Llama, Mistral, Qwen — local GPU/CPU",
+    color: "bg-emerald-500/15",
+    textColor: "text-emerald-400",
+    Icon: OllamaIcon,
+    hasBaseUrl: true,
+    urlPlaceholder: "http://localhost:11434",
+  },
+  custom: {
+    label: "Custom",
+    desc: "vLLM, LM Studio, Azure OpenAI — herhangi OpenAI-uyumlu endpoint",
+    color: "bg-indigo-500/15",
+    textColor: "text-indigo-400",
+    Icon: ({ size = 20 }) => <Plug size={size} />,
+    hasBaseUrl: true,
+    urlPlaceholder: "http://sunucu:8000/v1",
+  },
 };
 
-const DESCRIPTIONS: Record<string, string> = {
-  openai: "GPT-4o, GPT-4o mini, o1, o3-mini",
-  anthropic: "Claude Opus, Sonnet, Haiku",
-  gemini: "Gemini 2.5 Pro, Flash, Nano",
-  ollama: "Llama, Mistral, Qwen — local GPU/CPU",
-  custom: "vLLM, LM Studio, LocalAI, Azure OpenAI — herhangi OpenAI-uyumlu endpoint",
-};
+const ORDER = ["gemini", "openai", "anthropic", "ollama", "custom"];
 
-// base_url alanı olanlar
-const HAS_BASE_URL = new Set(["ollama", "custom"]);
-// api_key zorunlu olanlar (ollama yok, custom opsiyonel)
-const KEY_REQUIRED = new Set(["openai", "anthropic", "gemini"]);
-
-const ORDER = ["custom", "openai", "anthropic", "gemini", "ollama"];
+// ── Page ─────────────────────────────────────────────────────
 
 export default function ProvidersPage() {
   const [items, setItems] = useState<ProviderEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
-    api
-      .get<ProviderEntry[]>("/providers")
-      .then(setItems)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    api.get<ProviderEntry[]>("/providers").then(setItems).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => load(), [load]);
 
-  const ordered = [...items].sort(
-    (a, b) => ORDER.indexOf(a.provider) - ORDER.indexOf(b.provider),
-  );
+  const ordered = [...items].sort((a, b) => ORDER.indexOf(a.provider) - ORDER.indexOf(b.provider));
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10">
-      <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-zinc-100">
-          <Server size={18} className="text-indigo-400" />
-          Model sağlayıcıları
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Org&apos;a özel API anahtarları ve self-hosted (OpenAI-uyumlu) endpoint&apos;ler.
-          Yapılandırılmayan sağlayıcılar platform anahtarına düşer.
+      <div className="mb-8">
+        <h1 className="text-xl font-semibold text-zinc-100">Model sağlayıcıları</h1>
+        <p className="mt-1.5 text-sm text-zinc-500">
+          Org&apos;a özel API anahtarları. Yapılandırılmayanlar platform anahtarına düşer.
         </p>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner className="h-5 w-5" />
-        </div>
+        <div className="flex justify-center py-16"><Spinner className="h-5 w-5" /></div>
       ) : (
         <div className="flex flex-col gap-3">
-          {ordered.map((p) => (
-            <ProviderCard key={p.provider} entry={p} onChange={load} />
-          ))}
+          {ordered.map((p) => <ProviderCard key={p.provider} entry={p} onChange={load} />)}
         </div>
       )}
     </div>
   );
 }
 
-function ProviderCard({
-  entry,
-  onChange,
-}: {
-  entry: ProviderEntry;
-  onChange: () => void;
-}) {
+// ── Card ──────────────────────────────────────────────────────
+
+function ProviderCard({ entry, onChange }: { entry: ProviderEntry; onChange: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(entry.base_url ?? "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const hasBaseUrl = HAS_BASE_URL.has(entry.provider);
-  const keyRequired = KEY_REQUIRED.has(entry.provider);
+  const meta = PROVIDER_META[entry.provider];
+  if (!meta) return null;
+
+  const { Icon, color, textColor, hasBaseUrl, keyRequired, keyPlaceholder, urlPlaceholder } = meta;
 
   async function save() {
-    setBusy(true);
-    setMsg(null);
+    setBusy(true); setMsg(null);
     try {
       const body: Record<string, string> = { provider: entry.provider };
       if (apiKey.trim()) body.api_key = apiKey.trim();
@@ -115,112 +173,105 @@ function ProviderCard({
       onChange();
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof ApiError ? err.message : "Kaydedilemedi." });
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   async function test() {
-    setBusy(true);
-    setMsg(null);
+    setBusy(true); setMsg(null);
     try {
       const r = await api.get<{ healthy: boolean }>(`/providers/${entry.provider}/health`);
-      setMsg(
-        r.healthy
-          ? { kind: "ok", text: "Bağlantı sağlıklı ✓" }
-          : { kind: "err", text: "Endpoint yanıt verdi ama sağlıksız." },
-      );
+      setMsg(r.healthy
+        ? { kind: "ok", text: "Bağlantı sağlıklı ✓" }
+        : { kind: "err", text: "Endpoint yanıt verdi ama sağlıksız." });
     } catch (err) {
-      setMsg({ kind: "err", text: err instanceof ApiError ? err.message : "Bağlantı testi başarısız." });
-    } finally {
-      setBusy(false);
-    }
+      setMsg({ kind: "err", text: err instanceof ApiError ? err.message : "Test başarısız." });
+    } finally { setBusy(false); }
   }
 
   async function remove() {
-    if (!window.confirm(`${LABELS[entry.provider]} yapılandırmasını sil?`)) return;
-    setBusy(true);
-    setMsg(null);
+    if (!window.confirm(`${meta.label} yapılandırmasını sil?`)) return;
+    setBusy(true); setMsg(null);
     try {
       await api.delete(`/providers/${entry.provider}`);
       setBaseUrl("");
       onChange();
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof ApiError ? err.message : "Silinemedi." });
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-xl border px-4 py-4",
-        entry.provider === "custom"
-          ? "border-indigo-500/30 bg-indigo-500/5"
-          : "border-zinc-800/80 bg-zinc-900/40",
-      )}
-    >
-      <div className="mb-3 flex items-start gap-2">
+    <div className={cn(
+      "rounded-xl border bg-zinc-900/40 transition-colors",
+      entry.is_configured ? "border-zinc-700/80" : "border-zinc-800/60",
+    )}>
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", color, textColor)}>
+          <Icon size={20} />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-zinc-200">{LABELS[entry.provider] ?? entry.provider}</span>
-            {entry.is_configured ? (
-              <Badge variant="green">
-                <CheckCircle2 size={10} />
-                yapılandırıldı
-              </Badge>
-            ) : (
-              <Badge variant="zinc">yapılandırılmadı</Badge>
-            )}
+            <span className="text-sm font-semibold text-zinc-100">{meta.label}</span>
+            {entry.is_configured
+              ? <Badge variant="green"><CheckCircle2 size={10} />Aktif</Badge>
+              : <Badge variant="zinc">Yapılandırılmadı</Badge>
+            }
           </div>
-          <p className="mt-0.5 text-[11px] text-zinc-600">{DESCRIPTIONS[entry.provider]}</p>
-          {entry.base_url && (
-            <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-700">{entry.base_url}</p>
-          )}
+          <p className="text-[11px] text-zinc-500 mt-0.5">{meta.desc}</p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
+      {/* Form */}
+      <div className="border-t border-zinc-800/60 px-4 py-3 flex flex-col gap-2.5">
         {hasBaseUrl && (
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+              Base URL
+            </label>
+            <Input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={urlPlaceholder}
+              className="font-mono text-xs"
+            />
+            {entry.base_url && (
+              <p className="mt-1 truncate font-mono text-[11px] text-zinc-600">{entry.base_url}</p>
+            )}
+          </div>
+        )}
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+            API Anahtarı{!keyRequired && <span className="ml-1 normal-case text-zinc-600">(opsiyonel)</span>}
+          </label>
           <Input
-            label={`Base URL${entry.provider === "custom" ? " (OpenAI-uyumlu, ör. http://gpu:8000/v1)" : ""}`}
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder={entry.provider === "custom" ? "http://sunucu:8000/v1" : "http://localhost:11434"}
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={entry.masked_key ?? keyPlaceholder ?? (keyRequired ? "sk-..." : "gerekmiyorsa boş bırak")}
           />
-        )}
-        <Input
-          label={`API anahtarı${keyRequired ? "" : " (opsiyonel)"}`}
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={entry.masked_key ?? (keyRequired ? "sk-..." : "gerekmiyorsa boş bırak")}
-        />
-      </div>
+          {entry.masked_key && (
+            <p className="mt-1 font-mono text-[11px] text-zinc-600">Kayıtlı: {entry.masked_key}</p>
+          )}
+        </div>
 
-      {msg && (
-        <Alert variant={msg.kind === "ok" ? "success" : "error"} className="mt-3">
-          {msg.text}
-        </Alert>
-      )}
-
-      <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" onClick={save} loading={busy}>
-          Kaydet
-        </Button>
-        {entry.is_configured && (
-          <>
-            <Button size="sm" variant="outline" onClick={test} disabled={busy}>
-              <Activity size={13} />
-              Test et
-            </Button>
-            <Button size="sm" variant="ghost" onClick={remove} disabled={busy}>
-              <Trash2 size={13} />
-              Sil
-            </Button>
-          </>
+        {msg && (
+          <Alert variant={msg.kind === "ok" ? "success" : "error"}>{msg.text}</Alert>
         )}
+
+        <div className="flex items-center gap-2 pt-1">
+          <Button size="sm" onClick={save} loading={busy}>Kaydet</Button>
+          {entry.is_configured && (
+            <>
+              <Button size="sm" variant="outline" onClick={test} disabled={busy}>
+                <Activity size={13} />Test et
+              </Button>
+              <Button size="sm" variant="ghost" onClick={remove} disabled={busy} className="ml-auto text-zinc-600 hover:text-red-400">
+                <Trash2 size={13} />Sil
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
