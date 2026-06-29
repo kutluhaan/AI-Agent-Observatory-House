@@ -388,6 +388,25 @@ export interface TeamLeaderboardEntry {
   avg_duration_ms: number | null;
 }
 
+export interface DailyActivityPoint {
+  day: string;
+  total: number;
+  passed: number;
+  failed: number;
+}
+
+export interface AgentUsagePoint {
+  agent_id: string;
+  name: string;
+  runs: number;
+  avg_latency_ms: number | null;
+}
+
+export interface LatencyBucket {
+  bucket: string;
+  count: number;
+}
+
 export interface OrgDashboard {
   counts: { agents: number; suites: number; total_runs: number; completed_runs: number; teams?: number };
   success_run_rate: number | null;
@@ -400,6 +419,9 @@ export interface OrgDashboard {
   leaderboard: OrgLeaderboardEntry[];
   teams_evaluated: number;
   team_leaderboard: TeamLeaderboardEntry[];
+  daily_activity?: DailyActivityPoint[];
+  agent_usage?: AgentUsagePoint[];
+  latency_dist?: LatencyBucket[];
 }
 
 // F5.1 — agent performans paneli

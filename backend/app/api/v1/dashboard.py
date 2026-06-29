@@ -7,6 +7,9 @@ compute_suite_stats + compute_agent_stats fonksiyonlarını tekrar kullanır.
 Endpoint:
   GET /dashboard   — org overview: sayımlar, birleşik KPI'lar, agent lider tablosu
 """
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,6 +74,71 @@ async def get_dashboard(
         runs=list(runs),
         agent_groups=agent_groups,
     )
+
+    # ── Günlük aktivite (son 14 gün) ─────────────────────────
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    daily: dict = defaultdict(lambda: {"total": 0, "passed": 0, "failed": 0})
+    for run in runs:
+        if not run.created_at:
+            continue
+        run_dt = run.created_at if run.created_at.tzinfo else run.created_at.replace(tzinfo=timezone.utc)
+        if run_dt < cutoff:
+            continue
+        day = run_dt.strftime("%Y-%m-%d")
+        daily[day]["total"] += 1
+        summary = run.summary or {}
+        if run.status == "completed" and (summary.get("pass_rate") or 0) >= 1.0:
+            daily[day]["passed"] += 1
+        elif run.status in ("failed", "error"):
+            daily[day]["failed"] += 1
+    overview["daily_activity"] = sorted(
+        [{"day": k, **v} for k, v in daily.items()], key=lambda x: x["day"]
+    )
+
+    # ── Agent kullanım sıklığı (case çalıştırma sayısı) ──────
+    usage: dict = {}
+    for result, agent_id in rows:
+        if agent_id is None:
+            continue
+        key = str(agent_id)
+        if key not in usage:
+            usage[key] = {"runs": 0, "total_lat": 0.0, "n": 0, "name": agent_name.get(agent_id, "—")}
+        usage[key]["runs"] += 1
+        if result.latency_ms is not None:
+            usage[key]["total_lat"] += float(result.latency_ms)
+            usage[key]["n"] += 1
+    overview["agent_usage"] = sorted(
+        [
+            {
+                "agent_id": k,
+                "name": v["name"],
+                "runs": v["runs"],
+                "avg_latency_ms": round(v["total_lat"] / v["n"]) if v["n"] > 0 else None,
+            }
+            for k, v in usage.items()
+        ],
+        key=lambda x: x["runs"],
+        reverse=True,
+    )[:10]
+
+    # ── Gecikme dağılımı ─────────────────────────────────────
+    lat_buckets: Counter = Counter()
+    for result, _ in rows:
+        if result.latency_ms is None:
+            continue
+        ms = result.latency_ms
+        if ms < 1000:
+            lat_buckets["<1s"] += 1
+        elif ms < 3000:
+            lat_buckets["1-3s"] += 1
+        elif ms < 10000:
+            lat_buckets["3-10s"] += 1
+        else:
+            lat_buckets[">10s"] += 1
+    overview["latency_dist"] = [
+        {"bucket": b, "count": lat_buckets.get(b, 0)}
+        for b in ["<1s", "1-3s", "3-10s", ">10s"]
+    ]
 
     # C4: ekip lider tablosu — her ekibin run'larından performans
     teams = (await db.execute(
