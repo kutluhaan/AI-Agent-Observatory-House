@@ -163,8 +163,8 @@ function OrgView({ stats }: { stats: OrgDashboard }) {
         </ChartCard>
       )}
 
-      {/* Agent leaderboards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Leaderboards — 3 yan yana */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <ChartCard title={`Agent başarı sıralaması · ${stats.agents_evaluated} agent`}>
           {topAgents.length === 0 ? (
             <Empty text="Agent test verisi yok." />
@@ -193,20 +193,27 @@ function OrgView({ stats }: { stats: OrgDashboard }) {
             </div>
           </ChartCard>
         )}
-      </div>
 
-      {/* Team leaderboard */}
-      {topTeams.length > 0 && (
-        <ChartCard title={`Ekip sıralaması · ${stats.teams_evaluated} ekip`}>
-          <div className="flex flex-col gap-2 py-1">
-            {topTeams.map((t) => (
-              <Link key={t.team_id} href={`/teams/${t.team_id}`} className="group">
-                <BarRow label={t.name} value={t.success_rate ?? 0} sub={fmtPct(t.success_rate)} color={barColor(t.success_rate)} />
-              </Link>
-            ))}
-          </div>
-        </ChartCard>
-      )}
+        {topTeams.length > 0 ? (
+          <ChartCard title={`Ekip sıralaması · ${stats.teams_evaluated} ekip`}>
+            <div className="flex flex-col gap-2 py-1">
+              {topTeams.map((t) => (
+                <Link key={t.team_id} href={`/teams/${t.team_id}`} className="group">
+                  <BarRow label={t.name} value={t.success_rate ?? 0} sub={fmtPct(t.success_rate)} color={barColor(t.success_rate)} />
+                </Link>
+              ))}
+            </div>
+          </ChartCard>
+        ) : (
+          <ChartCard title="Genel">
+            <div className="flex flex-col gap-3 py-1">
+              <BigStat label="Toplam run" value={String(stats.counts.total_runs)} />
+              <BigStat label="Tamamlanan" value={String(stats.counts.completed_runs)} />
+              <BigStat label="Ort. gecikme" value={fmtDur(stats.avg_latency_ms)} />
+            </div>
+          </ChartCard>
+        )}
+      </div>
 
       {/* Summary donuts */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -585,3 +592,4 @@ function Donut({ value, label, color = "#34d399", size = 110 }: { value: number;
     </svg>
   );
 }
+
