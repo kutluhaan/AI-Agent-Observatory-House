@@ -120,6 +120,7 @@ function CanvasInner({ initialGraph, onSave, saving, topBar, extraActions }: Wor
             deleteKeyCode="Delete"
             className="bg-zinc-950"
             defaultEdgeOptions={{ style: { stroke: "#6366f1", strokeWidth: 1.5 }, animated: false }}
+            connectionLineStyle={{ stroke: "#6366f1", strokeWidth: 1.5, strokeDasharray: "4 2" }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#27272a" />
             <Controls className="!border-zinc-800 !bg-zinc-900 [&_button]:!border-zinc-800 [&_button]:!bg-zinc-900 [&_button]:!text-zinc-400 [&_button:hover]:!bg-zinc-800" />
