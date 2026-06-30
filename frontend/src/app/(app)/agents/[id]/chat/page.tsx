@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Send,
+  Square,
   Wrench,
   ShieldCheck,
   Activity,
@@ -137,6 +138,7 @@ export default function ChatPage() {
   const [question, setQuestion] = useState<QuestionState | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -337,15 +339,24 @@ export default function ChatPage() {
       { role: "assistant", segments: [], running: true },
     ]);
 
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
-      await streamConversationMessage(convId, text, handleEvent);
+      await streamConversationMessage(convId, text, handleEvent, ctrl.signal);
     } catch (err) {
-      patchAssistant((m) => ({
-        ...m,
-        running: false,
-        error: err instanceof Error ? err.message : "Stream failed.",
-      }));
+      if (err instanceof Error && err.name === "AbortError") {
+        // Kullanıcı durdurdu — hata gösterme, sadece çalışmayı bitir
+        patchAssistant((m) => ({ ...m, running: false }));
+      } else {
+        patchAssistant((m) => ({
+          ...m,
+          running: false,
+          error: err instanceof Error ? err.message : "Stream failed.",
+        }));
+      }
       setRunning(false);
+    } finally {
+      abortRef.current = null;
     }
     void refreshConversations();
   }
@@ -512,9 +523,20 @@ export default function ChatPage() {
                 className="resize-none"
               />
             </div>
-            <Button type="submit" size="lg" disabled={running || !input.trim()}>
-              {running ? <Spinner className="h-4 w-4" /> : <Send size={15} />}
-            </Button>
+            {running ? (
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white transition-colors hover:bg-red-500"
+                title="Durdur"
+              >
+                <Square size={14} fill="white" />
+              </button>
+            ) : (
+              <Button type="submit" size="lg" disabled={!input.trim()}>
+                <Send size={15} />
+              </Button>
+            )}
           </form>
         </div>
       </div>

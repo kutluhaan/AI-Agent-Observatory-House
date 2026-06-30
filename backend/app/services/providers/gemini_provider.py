@@ -21,16 +21,24 @@ from app.services.providers.base import (
 
 
 def _split_system_and_contents(messages: list[Message]) -> tuple[str | None, list[Any]]:
-    """Gemini: system ayrı parametre; mesajlar Content(role=user|model, parts=[...])."""
+    """Gemini: system ayrı parametre; mesajlar Content(role=user|model, parts=[...]).
+
+    CRITICAL: Gemini requires all function_responses for a single model turn to be
+    grouped into ONE user Content object with multiple Parts. Separate Content blocks
+    per tool response causes Gemini to lose track of the conversation and fall back
+    to text output instead of calling tools (observed in multi-turn conversations).
+    """
+    import json as _json
     from google.genai import types
 
     system_parts = [m.content for m in messages if m.role == "system"]
     system = "\n".join(p for p in system_parts if p) or None
 
+    non_system = [m for m in messages if m.role != "system"]
     contents: list[Any] = []
-    for m in messages:
-        if m.role == "system":
-            continue
+    i = 0
+    while i < len(non_system):
+        m = non_system[i]
         if m.role == "assistant":
             parts: list[Any] = []
             if m.content:
@@ -38,10 +46,9 @@ def _split_system_and_contents(messages: list[Message]) -> tuple[str | None, lis
             for tc in m.tool_calls or []:
                 args = tc.get("arguments", {})
                 if isinstance(args, str):
-                    import json
                     try:
-                        args = json.loads(args) if args else {}
-                    except json.JSONDecodeError:
+                        args = _json.loads(args) if args else {}
+                    except _json.JSONDecodeError:
                         args = {}
                 parts.append(
                     types.Part(
@@ -49,22 +56,26 @@ def _split_system_and_contents(messages: list[Message]) -> tuple[str | None, lis
                     )
                 )
             contents.append(types.Content(role="model", parts=parts or [types.Part(text="")]))
+            i += 1
         elif m.role == "tool":
-            contents.append(
-                types.Content(
-                    role="user",
-                    parts=[
-                        types.Part(
-                            function_response=types.FunctionResponse(
-                                name=m.tool_call_id or "",
-                                response={"result": m.content},
-                            )
+            # Group ALL consecutive tool messages into ONE user Content block.
+            # Gemini mandates this when the model called multiple functions in one turn.
+            tool_parts: list[Any] = []
+            while i < len(non_system) and non_system[i].role == "tool":
+                tm = non_system[i]
+                tool_parts.append(
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=tm.tool_call_id or "",
+                            response={"result": tm.content},
                         )
-                    ],
+                    )
                 )
-            )
+                i += 1
+            contents.append(types.Content(role="user", parts=tool_parts))
         else:  # user
-            contents.append(types.Content(role="user", parts=[types.Part(text=m.content)]))
+            contents.append(types.Content(role="user", parts=[types.Part(text=m.content or "")]))
+            i += 1
 
     return system, contents
 
@@ -108,6 +119,18 @@ def _normalize_finish(finish_reason: Any, has_tool_calls: bool) -> str:
     if name == "MAX_TOKENS":
         return "length"
     return "stop"
+
+
+def _is_terminal_finish(finish_reason: Any) -> bool:
+    """Return True only for finish reasons that actually mean 'generation is complete'.
+
+    FINISH_REASON_UNSPECIFIED is truthy as a Python enum but means 'not done yet'.
+    Emitting a done event for it would terminate the agent prematurely.
+    """
+    if finish_reason is None:
+        return False
+    name = getattr(finish_reason, "name", "").upper()
+    return bool(name) and "UNSPECIFIED" not in name
 
 
 def _raise_mapped(exc: Exception) -> None:
@@ -223,7 +246,7 @@ class GeminiProvider(BaseLLMProvider):
                                     "arguments": dict(fc.args) if fc.args else {},
                                 },
                             )
-                if candidate and candidate.finish_reason:
+                if _is_terminal_finish(candidate.finish_reason if candidate else None):
                     yield StreamEvent(
                         type="done",
                         finish_reason=_normalize_finish(candidate.finish_reason, has_tool_calls),
