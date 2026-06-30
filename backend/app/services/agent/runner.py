@@ -693,8 +693,9 @@ class AgentRunner(BaseAgent):
         try:
             handler = ToolRegistry.get(tool_name)
         except KeyError:
-            await self._emit_error("AGENT_TOOL_ERROR", f"Unknown tool: '{tool_name}'")
-            raise AgentToolError(f"Unknown tool: '{tool_name}'")
+            logger.warning("agent.tool_unknown", tool=tool_name)
+            available = ", ".join(sorted(ToolRegistry.all_names())[:15])
+            return f"[Unknown tool: '{tool_name}'. Available tools include: {available}. Correct the tool name and try again.]"
 
         ctx = self.tool_context or ToolContext(
             org_id=self.config.org_id,

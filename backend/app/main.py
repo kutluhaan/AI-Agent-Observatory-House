@@ -98,11 +98,6 @@ async def lifespan(app: FastAPI):
     register_skill_tools()
     logger.info("Agent skill tools registered")
 
-    # Faz 5: Workflow cron scheduler
-    from app.services.workflow.scheduler import run_scheduler
-    scheduler_task = asyncio.create_task(run_scheduler())
-    app.state.scheduler_task = scheduler_task
-
     # M10: HITL Engine başlat
     init_hitl_engine(redis)
     logger.info("HITL engine initialized")
@@ -120,13 +115,6 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    if hasattr(app.state, "scheduler_task"):
-        app.state.scheduler_task.cancel()
-        try:
-            await app.state.scheduler_task
-        except asyncio.CancelledError:
-            pass
-
     if consumer_task is not None:
         app.state.trace_consumer.stop()
         consumer_task.cancel()
@@ -248,10 +236,6 @@ app.include_router(team_runs_ws_router, prefix="/ws", tags=["ws"])
 
 from app.api.v1.custom_tools import router as custom_tools_router
 app.include_router(custom_tools_router, prefix="/custom-tools", tags=["custom-tools"])
-
-from app.api.v1.workflows import router as workflows_router, workflow_runs_router
-app.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
-app.include_router(workflow_runs_router, prefix="/workflow-runs", tags=["workflows"])
 
 # ─── Health Check ─────────────────────────────────────────
 

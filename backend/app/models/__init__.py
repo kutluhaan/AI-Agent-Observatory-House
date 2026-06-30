@@ -30,8 +30,6 @@ from app.models.github_connection import GithubConnection
 from app.models.team_knowledge import TeamKnowledge
 from app.models.notification_feed import Notification
 from app.models.team_file import TeamFile
-from app.models.workflow import Workflow, WorkflowRun, WorkflowNodeResult
-
 __all__ = [
     "User",
     "Organization",
@@ -65,7 +63,4 @@ __all__ = [
     "TeamKnowledge",
     "Notification",
     "TeamFile",
-    "Workflow",
-    "WorkflowRun",
-    "WorkflowNodeResult",
 ]
